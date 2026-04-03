@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
       mimeType = mimeMap[ext || ""] || "image/jpeg";
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-preview-04-17" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const result = await model.generateContent([
       SYSTEM_PROMPT,
