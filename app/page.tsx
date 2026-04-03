@@ -51,7 +51,9 @@ interface Calatorie {
   destinatii: OsmLocation[];
   ruta: RouteInfo | null;
   dataPlecare: string;
+  oraPlecare: string;
   dataIntoarcere: string;
+  oraSosire: string;
   tipRetur: "aceeasi" | "diferita" | "dus";
 }
 
@@ -158,7 +160,9 @@ export default function Home() {
   const [ruta, setRuta] = useState<RouteInfo | null>(null);
   const [rutaLoading, setRutaLoading] = useState(false);
   const [dataPlecare, setDataPlecare] = useState("");
+  const [oraPlecare, setOraPlecare] = useState("");
   const [dataIntoarcere, setDataIntoarcere] = useState("");
+  const [oraSosire, setOraSosire] = useState("");
   const [tipRetur, setTipRetur] = useState<"aceeasi" | "diferita" | "dus">("aceeasi");
   const [destinatiiIntoarcere, setDestinatiiIntoarcere] = useState<Waypoint[]>([emptyWaypoint()]);
 
@@ -178,7 +182,7 @@ export default function Home() {
   }, [plecare, destinatii]);
 
   const openModal = () => {
-    setStep(1); setRuta(null); setDataPlecare(""); setDataIntoarcere(""); setTipRetur("aceeasi");
+    setStep(1); setRuta(null); setDataPlecare(""); setOraPlecare(""); setDataIntoarcere(""); setOraSosire(""); setTipRetur("aceeasi");
     setPlecare({ ...emptyWaypoint(), query: MOCK_PROFILE.oras, location: { display_name: MOCK_PROFILE.oras, lat: String(MOCK_PROFILE.lat), lon: String(MOCK_PROFILE.lon), place_id: 0 } });
     setDestinatii([emptyWaypoint()]);
     setDestinatiiIntoarcere([emptyWaypoint()]);
@@ -188,7 +192,7 @@ export default function Home() {
   const creareCaHatorie = () => {
     const locs = destinatii.map(d => d.location).filter(Boolean) as OsmLocation[];
     if (!plecare.location || locs.length === 0) return;
-    const c: Calatorie = { id: uuidv4(), plecare: plecare.location, destinatii: locs, ruta, dataPlecare, dataIntoarcere, tipRetur };
+    const c: Calatorie = { id: uuidv4(), plecare: plecare.location, destinatii: locs, ruta, dataPlecare, oraPlecare, dataIntoarcere, oraSosire, tipRetur };
     setCalatorii(prev => [...prev, c]);
     setActivaId(c.id);
     setRows([]);
@@ -235,6 +239,40 @@ export default function Home() {
   const isScanning = scanning.size > 0;
   const canStep2 = plecare.location && destinatii.some(d => d.location);
   const canFinish = dataPlecare && dataIntoarcere;
+
+  const exportOrdin = async () => {
+    if (!calatoreaActiva) return;
+    const zile = Math.ceil((new Date(calatoreaActiva.dataIntoarcere).getTime() - new Date(calatoreaActiva.dataPlecare).getTime()) / 86400000) + 1;
+    const payload = {
+      unitatea: "",
+      numarOrdin: "",
+      dataOrdin: calatoreaActiva.dataPlecare,
+      numePrenume: MOCK_PROFILE.nume,
+      functia: MOCK_PROFILE.rol,
+      scopDeplasare: `deplasare în interes de serviciu`,
+      destinatie: calatoreaActiva.destinatii.map(d => d.display_name.split(",")[0]).join(", "),
+      dataPlecareZiOra: `${calatoreaActiva.dataPlecare} ora ${calatoreaActiva.oraPlecare || "..."}`,
+      dataSosireZiOra: `${calatoreaActiva.dataIntoarcere} ora ${calatoreaActiva.oraSosire || "..."}`,
+      distantaKm: calatoreaActiva.ruta ? String(calatoreaActiva.ruta.distanceKm) : "",
+      rows: rows.map(r => ({
+        fel: `${r.tipDocument} - ${r.emitent}`,
+        nrData: `${r.nrDocument} / ${r.dataDocument}`,
+        suma: r.valoareRON ? `${r.valoareRON} RON` : "",
+      })),
+      totalCheltuieli: `${totalRON.toFixed(2)} RON`,
+      avansPlecareSum: "",
+      totalAvans: "",
+      diferenta: "",
+    };
+    const res = await fetch("/api/ordin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Ordin_Deplasare_${MOCK_PROFILE.nume.replace(/\s+/g, "_")}_${calatoreaActiva.dataPlecare}.docx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="app">
@@ -356,7 +394,10 @@ export default function Home() {
                 </div>
                 <div className="table-actions">
                   <button className="btn btn-ghost" onClick={() => setRows(prev => [...prev, emptyRow(prev.length + 1)])}>+ Adaugă rând manual</button>
-                  <button className="btn btn-export" onClick={() => { const blob = generateExcel(rows); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `Decont_${new Date().toISOString().slice(0,10)}.xlsx`; a.click(); URL.revokeObjectURL(url); }} disabled={isScanning}>↓ Export Excel</button>
+                  <div style={{display:"flex",gap:"8px"}}>
+                    <button className="btn btn-ghost" onClick={exportOrdin}>📄 Export ordin deplasare</button>
+                    <button className="btn btn-export" onClick={() => { const blob = generateExcel(rows); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `Decont_${new Date().toISOString().slice(0,10)}.xlsx`; a.click(); URL.revokeObjectURL(url); }} disabled={isScanning}>↓ Export Excel</button>
+                  </div>
                 </div>
               </div>
             )}
@@ -411,7 +452,11 @@ export default function Home() {
                 <h2>Date deplasare</h2>
                 <div className="form-row">
                   <div className="form-group"><label>Data plecare</label><input type="date" value={dataPlecare} onChange={e => setDataPlecare(e.target.value)} /></div>
+                  <div className="form-group"><label>Ora plecare</label><input type="time" value={oraPlecare} onChange={e => setOraPlecare(e.target.value)} /></div>
+                </div>
+                <div className="form-row">
                   <div className="form-group"><label>Data întoarcere</label><input type="date" value={dataIntoarcere} min={dataPlecare} onChange={e => setDataIntoarcere(e.target.value)} /></div>
+                  <div className="form-group"><label>Ora sosire</label><input type="time" value={oraSosire} onChange={e => setOraSosire(e.target.value)} /></div>
                 </div>
                 <div className="form-group">
                   <label>Tip retur</label>
@@ -450,7 +495,7 @@ export default function Home() {
                   <div className="sumar-row"><span>Plecare</span><strong>{plecare.location?.display_name.split(",").slice(0, 2).join(", ")}</strong></div>
                   <div className="sumar-row"><span>Destinație</span><strong>{destinatii.filter(d => d.location).map(d => d.location!.display_name.split(",")[0]).join(" → ")}</strong></div>
                   {ruta && <div className="sumar-row"><span>Distanță</span><strong>{ruta.distanceKm} km · {formatDuration(ruta.durationMin)}</strong></div>}
-                  <div className="sumar-row"><span>Perioadă</span><strong>{dataPlecare} → {dataIntoarcere}</strong></div>
+                  <div className="sumar-row"><span>Perioadă</span><strong>{dataPlecare} {oraPlecare && `ora ${oraPlecare}`} → {dataIntoarcere} {oraSosire && `ora ${oraSosire}`}</strong></div>
                   <div className="sumar-row"><span>Retur</span><strong>{{ aceeasi: "Aceeași rută", diferita: "Rută diferită", dus: "Doar dus" }[tipRetur]}</strong></div>
                   {dataPlecare && dataIntoarcere && (
                     <div className="sumar-row sumar-total"><span>Diurnă totală</span><strong>{(() => { const z = Math.ceil((new Date(dataIntoarcere).getTime() - new Date(dataPlecare).getTime()) / 86400000) + 1; return `${z * MOCK_PROFILE.diurna} RON`; })()}</strong></div>
