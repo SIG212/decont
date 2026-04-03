@@ -339,7 +339,7 @@ export async function generateOrdinDeplasare(data: OrdinData): Promise<Buffer> {
       children: [new TableCell({
         children: [new Paragraph({ children: [lbl("Diferența de restituit / primit: "), val(data.diferenta), lbl(" lei.")] })],
         width: { size: W, type: WidthType.DXA },
-        borders: { top: bNone, bottom: bNone, left: { style: BorderStyle.SINGLE, size: 4, color: "CCCCCC" }, right: { style: BorderStyle.SINGLE, size: 4, color: "CCCCCC" }, ...{ top: { style: BorderStyle.SINGLE, size: 4, color: "CCCCCC" }, bottom: { style: BorderStyle.SINGLE, size: 4, color: "CCCCCC" } } } as any,
+        borders: { top: { style: BorderStyle.SINGLE, size: 4, color: "CCCCCC" }, bottom: { style: BorderStyle.SINGLE, size: 4, color: "CCCCCC" }, left: { style: BorderStyle.SINGLE, size: 4, color: "CCCCCC" }, right: { style: BorderStyle.SINGLE, size: 4, color: "CCCCCC" } } as any,
         margins: { top: 80, bottom: 80, left: 100, right: 100 },
       })],
     })],
