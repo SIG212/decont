@@ -1,238 +1,341 @@
 import {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
   AlignmentType, BorderStyle, WidthType, ShadingType, VerticalAlign,
+  PageBreak, HeadingLevel,
 } from "docx";
 
-const border = { style: BorderStyle.SINGLE, size: 4, color: "000000" };
-const borders = { top: border, bottom: border, left: border, right: border };
-const noBorder = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
-const noBorders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder };
+export interface OrdinData {
+  numarOrdin?: string;
+  dataOrdin?: string;
+  numePrenume?: string;
+  functia?: string;
+  scopDeplasare?: string;
+  destinatie?: string;
+  dataPlecareZiOra?: string;
+  dataSosireZiOra?: string;
+  legitimatie?: string;
+  avansAcordat?: string;
+  rows?: { fel: string; nrData: string; suma: string }[];
+  totalCheltuieli?: string;
+  diferenta?: string;
+}
 
-function cell(text: string, opts: {
-  bold?: boolean; width?: number; colSpan?: number; align?: typeof AlignmentType[keyof typeof AlignmentType];
-  shade?: string; noBorder?: boolean; size?: number;
-} = {}) {
+// ── helpers ────────────────────────────────────────────────────────────────
+
+const W = 9360; // content width in DXA (A4 with 1.8cm margins each side)
+const FONT = "Calibri";
+const SIZE_NORMAL = 20; // 10pt
+const SIZE_LABEL = 18;  // 9pt
+
+const borderNone = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+const borderThin = { style: BorderStyle.SINGLE, size: 4, color: "AAAAAA" };
+const borderMed  = { style: BorderStyle.SINGLE, size: 8, color: "1E3A5F" };
+const borderAll  = { top: borderThin, bottom: borderThin, left: borderThin, right: borderThin };
+const borderNoneAll = { top: borderNone, bottom: borderNone, left: borderNone, right: borderNone };
+
+function val(text?: string) {
+  return text?.trim() || "—";
+}
+
+function labelRun(text: string): TextRun {
+  return new TextRun({ text, font: FONT, size: SIZE_LABEL, color: "6B7A90" });
+}
+
+function valueRun(text?: string): TextRun {
+  return new TextRun({ text: val(text), font: FONT, size: SIZE_NORMAL, italic: true, color: "1A2335" });
+}
+
+function boldRun(text: string, size = SIZE_NORMAL): TextRun {
+  return new TextRun({ text, font: FONT, size, bold: true, color: "1E3A5F" });
+}
+
+function cell(
+  children: Paragraph[],
+  opts: { width?: number; shade?: string; borders?: object; valign?: typeof VerticalAlign.CENTER; colSpan?: number } = {}
+): TableCell {
   return new TableCell({
-    borders: opts.noBorder ? noBorders : borders,
+    children,
     columnSpan: opts.colSpan,
-    width: { size: opts.width ?? 4500, type: WidthType.DXA },
+    width: { size: opts.width ?? W, type: WidthType.DXA },
+    borders: (opts.borders ?? borderNoneAll) as Parameters<typeof TableCell>[0]["borders"],
     shading: opts.shade ? { fill: opts.shade, type: ShadingType.CLEAR } : undefined,
-    verticalAlign: VerticalAlign.CENTER,
-    margins: { top: 60, bottom: 60, left: 100, right: 100 },
-    children: [new Paragraph({
-      alignment: opts.align ?? AlignmentType.LEFT,
-      children: [new TextRun({
-        text,
-        bold: opts.bold,
-        size: opts.size ?? 18,
-        font: "Times New Roman",
-      })],
-    })],
+    verticalAlign: opts.valign ?? VerticalAlign.CENTER,
+    margins: { top: 80, bottom: 80, left: 140, right: 140 },
   });
 }
 
-function dots(label: string, value: string, width = 4500) {
-  return cell(`${label} ${value || "..................................."}`, { width });
+function fieldRow(label: string, value?: string, w1 = 2800, w2 = W - 2800): TableRow {
+  return new TableRow({
+    children: [
+      cell([new Paragraph({ children: [labelRun(label)] })], { width: w1, borders: borderNoneAll }),
+      cell([new Paragraph({ children: [valueRun(value)], border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: "C5D3E8", space: 1 } } })], { width: w2 }),
+    ],
+  });
 }
 
-interface OrdinData {
-  unitatea: string;
-  numarOrdin: string;
-  dataOrdin: string;
-  numePrenume: string;
-  functia: string;
-  scopDeplasare: string;
-  destinatie: string;
-  dataPlecareZiOra: string;
-  dataSosireZiOra: string;
-  distantaKm: string;
-  rows: { fel: string; nrData: string; suma: string }[];
-  totalCheltuieli: string;
-  avansPlecareSum: string;
-  totalAvans: string;
-  diferenta: string;
+function sectionHeader(title: string): Paragraph {
+  return new Paragraph({
+    children: [boldRun(title, 22)],
+    spacing: { before: 280, after: 100 },
+    border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: "1E3A5F", space: 4 } },
+  });
 }
+
+function divider(): Paragraph {
+  return new Paragraph({
+    children: [],
+    border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: "EEEEEE", space: 4 } },
+    spacing: { before: 120, after: 120 },
+  });
+}
+
+function spacer(lines = 1): Paragraph {
+  return new Paragraph({ children: [new TextRun({ text: "", size: SIZE_NORMAL * lines })], spacing: { after: 0 } });
+}
+
+// ── main ───────────────────────────────────────────────────────────────────
 
 export async function generateOrdinDeplasare(data: OrdinData): Promise<Buffer> {
-  const tableWidth = 9000;
+
+  // ── FAŢĂ ─────────────────────────────────────────────────────────────────
+
+  const headerTable = new Table({
+    width: { size: W, type: WidthType.DXA },
+    columnWidths: [W - 2800, 2800],
+    rows: [
+      new TableRow({
+        children: [
+          cell([
+            new Paragraph({ children: [boldRun("ORDIN DE DEPLASARE", 32)], alignment: AlignmentType.LEFT }),
+            new Paragraph({ children: [new TextRun({ text: "( DELEGAŢIE )", font: FONT, size: 22, color: "6B7A90" })], alignment: AlignmentType.LEFT }),
+          ], { width: W - 2800, shade: "F0F4FA" }),
+          cell([
+            new Paragraph({ children: [labelRun("Nr. ordin")], alignment: AlignmentType.RIGHT }),
+            new Paragraph({ children: [boldRun(val(data.numarOrdin), 28)], alignment: AlignmentType.RIGHT }),
+            new Paragraph({ children: [labelRun("Data")], alignment: AlignmentType.RIGHT }),
+            new Paragraph({ children: [valueRun(data.dataOrdin)], alignment: AlignmentType.RIGHT }),
+          ], { width: 2800, shade: "F0F4FA" }),
+        ],
+      }),
+    ],
+  });
+
+  const dateAngajatTable = new Table({
+    width: { size: W, type: WidthType.DXA },
+    columnWidths: [W / 2, W / 2],
+    rows: [
+      new TableRow({
+        children: [
+          cell([
+            new Paragraph({ children: [labelRun("Nume și prenume")] }),
+            new Paragraph({ children: [valueRun(data.numePrenume)], border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: "C5D3E8", space: 1 } } }),
+          ], { width: W / 2 }),
+          cell([
+            new Paragraph({ children: [labelRun("Funcția")] }),
+            new Paragraph({ children: [valueRun(data.functia)], border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: "C5D3E8", space: 1 } } }),
+          ], { width: W / 2 }),
+        ],
+      }),
+    ],
+  });
+
+  const dateDeplasareTable = new Table({
+    width: { size: W, type: WidthType.DXA },
+    columnWidths: [W / 2, W / 2],
+    rows: [
+      new TableRow({
+        children: [
+          cell([
+            new Paragraph({ children: [labelRun("Destinație")] }),
+            new Paragraph({ children: [valueRun(data.destinatie)], border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: "C5D3E8", space: 1 } } }),
+          ], { width: W / 2 }),
+          cell([
+            new Paragraph({ children: [labelRun("Se legitimează cu")] }),
+            new Paragraph({ children: [valueRun(data.legitimatie)], border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: "C5D3E8", space: 1 } } }),
+          ], { width: W / 2 }),
+        ],
+      }),
+      new TableRow({
+        children: [
+          cell([
+            new Paragraph({ children: [labelRun("Scopul deplasării")] }),
+            new Paragraph({ children: [valueRun(data.scopDeplasare)], border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: "C5D3E8", space: 1 } } }),
+          ], { width: W, colSpan: 2 } as Parameters<typeof cell>[1]),
+        ],
+      }),
+      new TableRow({
+        children: [
+          cell([
+            new Paragraph({ children: [labelRun("Plecare (ziua, luna, anul și ora)")] }),
+            new Paragraph({ children: [valueRun(data.dataPlecareZiOra)], border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: "C5D3E8", space: 1 } } }),
+          ], { width: W / 2 }),
+          cell([
+            new Paragraph({ children: [labelRun("Sosire (ziua, luna, anul și ora)")] }),
+            new Paragraph({ children: [valueRun(data.dataSosireZiOra)], border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: "C5D3E8", space: 1 } } }),
+          ], { width: W / 2 }),
+        ],
+      }),
+    ],
+  });
+
+  const semnaturaTable = new Table({
+    width: { size: W, type: WidthType.DXA },
+    columnWidths: [W / 3, W / 3, W / 3],
+    rows: [
+      new TableRow({
+        children: [
+          cell([new Paragraph({ children: [labelRun("Ștampila unității și semnătura")] })], { width: W / 3 }),
+          cell([new Paragraph({ children: [labelRun("Aprobat, conducătorul unității")] })], { width: W / 3 }),
+          cell([new Paragraph({ children: [labelRun("Data")] }), new Paragraph({ children: [valueRun(data.dataOrdin)] }) ], { width: W / 3 }),
+        ],
+      }),
+      new TableRow({
+        height: { value: 800, rule: "exact" as "exact" },
+        children: [
+          cell([spacer()], { width: W / 3 }),
+          cell([spacer()], { width: W / 3 }),
+          cell([spacer()], { width: W / 3 }),
+        ],
+      }),
+    ],
+  });
+
+  // ── VERSO ────────────────────────────────────────────────────────────────
+
+  const rows = data.rows || [];
+  const EMPTY_ROWS = Math.max(0, 12 - rows.length);
+
+  const cheltuieliHeaderRow = new TableRow({
+    children: [
+      cell([new Paragraph({ children: [boldRun("Felul actului și emitentul", SIZE_LABEL)], alignment: AlignmentType.CENTER })],
+        { width: 5600, shade: "EEF3FB", borders: borderAll }),
+      cell([new Paragraph({ children: [boldRun("Nr. și data actului", SIZE_LABEL)], alignment: AlignmentType.CENTER })],
+        { width: 2200, shade: "EEF3FB", borders: borderAll }),
+      cell([new Paragraph({ children: [boldRun("Suma (RON)", SIZE_LABEL)], alignment: AlignmentType.CENTER })],
+        { width: 1560, shade: "EEF3FB", borders: borderAll }),
+    ],
+  });
+
+  const cheltuieliRows = rows.map((r, i) =>
+    new TableRow({
+      children: [
+        cell([new Paragraph({ children: [valueRun(r.fel)] })], { width: 5600, shade: i % 2 === 0 ? "FFFFFF" : "F7F9FC", borders: borderAll }),
+        cell([new Paragraph({ children: [valueRun(r.nrData)], alignment: AlignmentType.CENTER })], { width: 2200, shade: i % 2 === 0 ? "FFFFFF" : "F7F9FC", borders: borderAll }),
+        cell([new Paragraph({ children: [valueRun(r.suma)], alignment: AlignmentType.RIGHT })], { width: 1560, shade: i % 2 === 0 ? "FFFFFF" : "F7F9FC", borders: borderAll }),
+      ],
+    })
+  );
+
+  const emptyRows = Array.from({ length: EMPTY_ROWS }, () =>
+    new TableRow({
+      height: { value: 360, rule: "atLeast" as "atLeast" },
+      children: [
+        cell([spacer()], { width: 5600, borders: borderAll }),
+        cell([spacer()], { width: 2200, borders: borderAll }),
+        cell([spacer()], { width: 1560, borders: borderAll }),
+      ],
+    })
+  );
+
+  const totalRow = new TableRow({
+    children: [
+      cell([new Paragraph({ children: [boldRun("TOTAL CHELTUIELI", SIZE_LABEL)], alignment: AlignmentType.RIGHT })],
+        { width: 5600 + 2200, colSpan: 2, shade: "EEF3FB", borders: borderAll } as Parameters<typeof cell>[1]),
+      cell([new Paragraph({ children: [boldRun(val(data.totalCheltuieli))], alignment: AlignmentType.RIGHT })],
+        { width: 1560, shade: "EEF3FB", borders: borderAll }),
+    ],
+  });
+
+  const cheltuieliTable = new Table({
+    width: { size: W, type: WidthType.DXA },
+    columnWidths: [5600, 2200, 1560],
+    rows: [cheltuieliHeaderRow, ...cheltuieliRows, ...emptyRows, totalRow],
+  });
+
+  const avansTable = new Table({
+    width: { size: W, type: WidthType.DXA },
+    columnWidths: [W / 2, W / 2],
+    rows: [
+      new TableRow({
+        children: [
+          cell([
+            new Paragraph({ children: [labelRun("Avans acordat la plecare")] }),
+            new Paragraph({ children: [valueRun(data.avansAcordat || "—")], border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: "C5D3E8", space: 1 } } }),
+          ], { width: W / 2 }),
+          cell([
+            new Paragraph({ children: [labelRun("Diferența de depus / restituit")] }),
+            new Paragraph({ children: [valueRun(data.diferenta || "—")], border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: "C5D3E8", space: 1 } } }),
+          ], { width: W / 2 }),
+        ],
+      }),
+    ],
+  });
+
+  const semnaturiVersoTable = new Table({
+    width: { size: W, type: WidthType.DXA },
+    columnWidths: [W / 6, W / 6, W / 6, W / 6, W / 6, W / 6],
+    rows: [
+      new TableRow({
+        children: ["Semnătura", "Aprobat conducătorul unității", "Control financiar preventiv", "Verificat decont", "Șef compartiment", "Titular avans"].map((label, i) =>
+          cell([new Paragraph({ children: [labelRun(label)], alignment: AlignmentType.CENTER })],
+            { width: W / 6, borders: borderAll, shade: i === 0 ? undefined : "FAFBFD" })
+        ),
+      }),
+      new TableRow({
+        height: { value: 900, rule: "atLeast" as "atLeast" },
+        children: Array.from({ length: 6 }, () =>
+          cell([spacer()], { width: W / 6, borders: borderAll })
+        ),
+      }),
+    ],
+  });
+
+  // ── Document ─────────────────────────────────────────────────────────────
 
   const doc = new Document({
     sections: [{
       properties: {
         page: {
           size: { width: 11906, height: 16838 },
-          margin: { top: 720, right: 720, bottom: 720, left: 720 },
+          margin: { top: 900, right: 900, bottom: 900, left: 900 },
         },
       },
       children: [
-        // Header
+        // FAŢĂ
+        headerTable,
+        spacer(),
+        sectionHeader("Date angajat"),
+        spacer(),
+        dateAngajatTable,
+        spacer(),
+        sectionHeader("Date deplasare"),
+        spacer(),
+        dateDeplasareTable,
+        spacer(),
+        sectionHeader("Aprobare"),
+        spacer(),
+        semnaturaTable,
+
+        // page break → VERSO
+        new Paragraph({ children: [new PageBreak()] }),
+
         new Paragraph({
-          alignment: AlignmentType.RIGHT,
-          children: [new TextRun({ text: "Depus decontul (numărul şi data) .......................", size: 16, font: "Times New Roman" })],
+          children: [boldRun("VERSO — CHELTUIELI EFECTIVE", 26)],
           spacing: { after: 60 },
+          border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: "1E3A5F", space: 4 } },
         }),
-
-        new Table({
-          width: { size: tableWidth, type: WidthType.DXA },
-          columnWidths: [tableWidth],
-          rows: [
-            new TableRow({ children: [cell(`(Unitatea) ${data.unitatea || "..................................................."}`, { width: tableWidth, align: AlignmentType.CENTER })] }),
-            new TableRow({ children: [cell("ORDIN DE DEPLASARE (DELEGAŢIE)", { width: tableWidth, bold: true, align: AlignmentType.CENTER, shade: "EEEEEE", size: 22 })] }),
-            new TableRow({ children: [cell(`Nr. ${data.numarOrdin || "............"}`, { width: tableWidth, align: AlignmentType.CENTER })] }),
-            new TableRow({ children: [cell(`Domnul (a) ${data.numePrenume || "..................................................................."}`, { width: tableWidth })] }),
-            new TableRow({ children: [cell(`având funcţia de ${data.functia || "..................................................................."}`, { width: tableWidth })] }),
-            new TableRow({ children: [cell(`este delegat pentru ${data.scopDeplasare || "..................................................................."}`, { width: tableWidth })] }),
-            new TableRow({ children: [cell(`la ${data.destinatie || "..................................................................."}`, { width: tableWidth })] }),
-            new TableRow({ children: [cell(`Durata deplasării de la ${data.dataPlecareZiOra || "............"} la ${data.dataSosireZiOra || "............"}`, { width: tableWidth })] }),
-            new TableRow({ children: [cell("Se legitimează cu .............................................", { width: tableWidth })] }),
-            new TableRow({ children: [
-              cell("Ştampila unităţii şi semnătura", { width: tableWidth / 2, align: AlignmentType.LEFT }),
-              cell(`Data ${data.dataOrdin || "........................"}`, { width: tableWidth / 2, align: AlignmentType.RIGHT }),
-            ] }),
-          ],
-        }),
-
-        new Paragraph({ children: [new TextRun({ text: " ", size: 14 })] }),
-
-        // Sosit/Plecat table (4 coloane)
-        new Table({
-          width: { size: tableWidth, type: WidthType.DXA },
-          columnWidths: [2250, 2250, 2250, 2250],
-          rows: [
-            new TableRow({ children: [
-              cell("Sosit *) .........................", { width: 2250 }),
-              cell("Plecat *) ........................", { width: 2250 }),
-              cell("Sosit *) .........................", { width: 2250 }),
-              cell("Plecat *) ........................", { width: 2250 }),
-            ] }),
-            new TableRow({ children: [
-              cell("Cu (fără) cazare", { width: 2250 }),
-              cell("Ştampila unităţii şi semnătura", { width: 2250 }),
-              cell("Cu (fără) cazare", { width: 2250 }),
-              cell("Ştampila unităţii şi semnătura", { width: 2250 }),
-            ] }),
-          ],
-        }),
-
-        new Paragraph({ children: [new TextRun({ text: "*) Se va completa ziua, luna, anul şi ora.", size: 14, font: "Times New Roman", italics: true })], spacing: { before: 60, after: 60 } }),
-
-        // Verso title
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          children: [new TextRun({ text: "(verso)", size: 16, font: "Times New Roman", italics: true })],
-          spacing: { before: 60, after: 60 },
-        }),
-
-        // Verso main table
-        new Table({
-          width: { size: tableWidth, type: WidthType.DXA },
-          columnWidths: [4500, 4500],
-          rows: [
-            new TableRow({ children: [
-              cell(`Ziua şi ora plecării ${data.dataPlecareZiOra || "...................."}`, { width: 4500 }),
-              cell("Avans spre decontare:", { width: 4500, bold: true }),
-            ] }),
-            new TableRow({ children: [
-              cell(`Ziua şi ora sosirii ${data.dataSosireZiOra || "....................."}`, { width: 4500 }),
-              cell(`- Primit la plecare ${data.avansPlecareSum || "............"} lei`, { width: 4500 }),
-            ] }),
-            new TableRow({ children: [
-              cell("Data depunerii decontului ..............", { width: 4500 }),
-              cell("- Primit în timpul deplasării ........... lei", { width: 4500 }),
-            ] }),
-            new TableRow({ children: [
-              cell("Penalizări calculate .....................", { width: 4500 }),
-              cell(`TOTAL ${data.totalAvans || "........................."} lei`, { width: 4500, bold: true }),
-            ] }),
-          ],
-        }),
-
-        new Paragraph({ children: [new TextRun({ text: " ", size: 10 })] }),
-
-        // Cheltuieli title
-        new Table({
-          width: { size: tableWidth, type: WidthType.DXA },
-          columnWidths: [tableWidth],
-          rows: [
-            new TableRow({ children: [cell("CHELTUIELI EFECTUATE CONFORM DOCUMENTELOR ANEXATE", { width: tableWidth, bold: true, align: AlignmentType.CENTER, shade: "DDDDDD" })] }),
-          ],
-        }),
-
-        // Cheltuieli header
-        new Table({
-          width: { size: tableWidth, type: WidthType.DXA },
-          columnWidths: [5400, 2400, 1200],
-          rows: [
-            new TableRow({
-              tableHeader: true,
-              children: [
-                cell("Felul actului şi emitentul", { width: 5400, bold: true, align: AlignmentType.CENTER, shade: "EEEEEE" }),
-                cell("Nr. şi data actului", { width: 2400, bold: true, align: AlignmentType.CENTER, shade: "EEEEEE" }),
-                cell("Suma", { width: 1200, bold: true, align: AlignmentType.CENTER, shade: "EEEEEE" }),
-              ],
-            }),
-            // Data rows
-            ...data.rows.map(r => new TableRow({ children: [
-              cell(r.fel || "", { width: 5400 }),
-              cell(r.nrData || "", { width: 2400, align: AlignmentType.CENTER }),
-              cell(r.suma || "", { width: 1200, align: AlignmentType.RIGHT }),
-            ] })),
-            // Empty rows padding
-            ...(data.rows.length < 10 ? Array(10 - data.rows.length).fill(null).map(() =>
-              new TableRow({ children: [
-                cell("", { width: 5400 }),
-                cell("", { width: 2400 }),
-                cell("", { width: 1200 }),
-              ] })
-            ) : []),
-            // Total
-            new TableRow({ children: [
-              cell("TOTAL CHELTUIELI", { width: 5400, bold: true, shade: "EEEEEE" }),
-              cell("", { width: 2400, shade: "EEEEEE" }),
-              cell(data.totalCheltuieli || "", { width: 1200, bold: true, align: AlignmentType.RIGHT, shade: "EEEEEE" }),
-            ] }),
-          ],
-        }),
-
-        new Paragraph({ children: [new TextRun({ text: " ", size: 10 })] }),
-
-        // Diferenta
-        new Table({
-          width: { size: tableWidth, type: WidthType.DXA },
-          columnWidths: [4500, 4500],
-          rows: [
-            new TableRow({ children: [
-              cell(`Diferenţa de restituit s-a depus cu chitanţa nr. ....... din ........`, { width: 4500 }),
-              cell(`primit / Diferenţa de restituit: ${data.diferenta || "............"} lei`, { width: 4500 }),
-            ] }),
-          ],
-        }),
-
-        new Paragraph({ children: [new TextRun({ text: " ", size: 10 })] }),
-
-        // Semnături
-        new Table({
-          width: { size: tableWidth, type: WidthType.DXA },
-          columnWidths: [1200, 1800, 1500, 1500, 1800, 1200],
-          rows: [
-            new TableRow({ children: [
-              cell("Semnătura", { width: 1200, align: AlignmentType.CENTER, size: 16 }),
-              cell("Aprobat, conducătorul unităţii", { width: 1800, align: AlignmentType.CENTER, size: 16 }),
-              cell("Control financiar-preventiv", { width: 1500, align: AlignmentType.CENTER, size: 16 }),
-              cell("Verificat decont", { width: 1500, align: AlignmentType.CENTER, size: 16 }),
-              cell("Şef compartiment", { width: 1800, align: AlignmentType.CENTER, size: 16 }),
-              cell("Titular avans", { width: 1200, align: AlignmentType.CENTER, size: 16 }),
-            ] }),
-            new TableRow({ children: [
-              cell("", { width: 1200 }),
-              cell("", { width: 1800 }),
-              cell("", { width: 1500 }),
-              cell("", { width: 1500 }),
-              cell("", { width: 1800 }),
-              cell("", { width: 1200 }),
-            ] }),
-          ],
-        }),
+        spacer(),
+        sectionHeader("Cheltuieli efectuate conform documentelor anexate"),
+        spacer(),
+        cheltuieliTable,
+        spacer(),
+        sectionHeader("Decontare"),
+        spacer(),
+        avansTable,
+        spacer(),
+        sectionHeader("Semnături"),
+        spacer(),
+        semnaturiVersoTable,
       ],
     }],
   });
