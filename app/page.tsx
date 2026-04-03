@@ -240,7 +240,7 @@ export default function Home() {
   const canStep2 = plecare.location && destinatii.some(d => d.location);
   const canFinish = dataPlecare && dataIntoarcere;
 
-  const exportOrdin = async () => {
+  const previewOrdin = async () => {
     if (!calatoreaActiva) return;
     const zile = Math.ceil((new Date(calatoreaActiva.dataIntoarcere).getTime() - new Date(calatoreaActiva.dataPlecare).getTime()) / 86400000) + 1;
     const payload = {
@@ -249,7 +249,7 @@ export default function Home() {
       dataOrdin: calatoreaActiva.dataPlecare,
       numePrenume: MOCK_PROFILE.nume,
       functia: MOCK_PROFILE.rol,
-      scopDeplasare: `deplasare în interes de serviciu`,
+      scopDeplasare: "deplasare în interes de serviciu",
       destinatie: calatoreaActiva.destinatii.map(d => d.display_name.split(",")[0]).join(", "),
       dataPlecareZiOra: `${calatoreaActiva.dataPlecare} ora ${calatoreaActiva.oraPlecare || "..."}`,
       dataSosireZiOra: `${calatoreaActiva.dataIntoarcere} ora ${calatoreaActiva.oraSosire || "..."}`,
@@ -264,14 +264,15 @@ export default function Home() {
       totalAvans: "",
       diferenta: "",
     };
-    const res = await fetch("/api/ordin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    const blob = await res.blob();
+    const res = await fetch("/api/ordin/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const html = await res.text();
+    const blob = new Blob([html], { type: "text/html" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Ordin_Deplasare_${MOCK_PROFILE.nume.replace(/\s+/g, "_")}_${calatoreaActiva.dataPlecare}.docx`;
-    a.click();
-    URL.revokeObjectURL(url);
+    window.open(url, "_blank");
   };
 
   return (
@@ -395,7 +396,7 @@ export default function Home() {
                 <div className="table-actions">
                   <button className="btn btn-ghost" onClick={() => setRows(prev => [...prev, emptyRow(prev.length + 1)])}>+ Adaugă rând manual</button>
                   <div style={{display:"flex",gap:"8px"}}>
-                    <button className="btn btn-ghost" onClick={exportOrdin}>📄 Export ordin deplasare</button>
+                    <button className="btn btn-ghost" onClick={previewOrdin}>👁 Preview ordin deplasare</button>
                     <button className="btn btn-export" onClick={() => { const blob = generateExcel(rows); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `Decont_${new Date().toISOString().slice(0,10)}.xlsx`; a.click(); URL.revokeObjectURL(url); }} disabled={isScanning}>↓ Export Excel</button>
                   </div>
                 </div>
