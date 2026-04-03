@@ -246,10 +246,9 @@ export default function Home() {
     if (!calatoreaActiva) return;
     const zile = Math.ceil((new Date(calatoreaActiva.dataIntoarcere).getTime() - new Date(calatoreaActiva.dataPlecare).getTime()) / 86400000) + 1;
     const payload = {
-      unitatea: "",
+      unitatea: MOCK_PROFILE.unitatea,
       numarOrdin: "",
       dataOrdin: calatoreaActiva.dataPlecare,
-      unitatea: MOCK_PROFILE.unitatea,
       numePrenume: MOCK_PROFILE.nume,
       functia: MOCK_PROFILE.rol,
       legitimatie: MOCK_PROFILE.legitimatie,
