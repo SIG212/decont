@@ -13,6 +13,8 @@ const MOCK_PROFILE = {
   lon: 23.6236,
   diurna: 75,
   transport: ["Mașină personală", "Avion", "Transport în comun"],
+  unitatea: "SC Exemplu SRL · CUI 12345678 · Str. Exemplu nr. 1, Cluj-Napoca",
+  legitimatie: "CI seria XY nr. 123456",
 };
 
 const MOCK_KPI = {
@@ -247,8 +249,10 @@ export default function Home() {
       unitatea: "",
       numarOrdin: "",
       dataOrdin: calatoreaActiva.dataPlecare,
+      unitatea: MOCK_PROFILE.unitatea,
       numePrenume: MOCK_PROFILE.nume,
       functia: MOCK_PROFILE.rol,
+      legitimatie: MOCK_PROFILE.legitimatie,
       scopDeplasare: "deplasare în interes de serviciu",
       destinatie: calatoreaActiva.destinatii.map(d => d.display_name.split(",")[0]).join(", "),
       dataPlecareZiOra: `${calatoreaActiva.dataPlecare} ora ${calatoreaActiva.oraPlecare || "..."}`,
@@ -307,6 +311,8 @@ export default function Home() {
             <div className="profile-meta">
               <div className="meta-item"><span className="meta-label">Diurnă / zi</span><span className="meta-value">{MOCK_PROFILE.diurna} RON</span></div>
               <div className="meta-item"><span className="meta-label">Transport</span><div className="transport-tags">{MOCK_PROFILE.transport.map(t => <span key={t} className="tag">{t}</span>)}</div></div>
+              <div className="meta-item"><span className="meta-label">Unitatea</span><span className="meta-value" style={{fontSize:"12px"}}>{MOCK_PROFILE.unitatea}</span></div>
+              <div className="meta-item"><span className="meta-label">Legitimație</span><span className="meta-value">{MOCK_PROFILE.legitimatie}</span></div>
             </div>
           </div>
           <div className="kpis">
