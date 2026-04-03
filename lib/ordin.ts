@@ -42,7 +42,7 @@ function labelRun(text: string): TextRun {
 }
 
 function valueRun(text?: string): TextRun {
-  return new TextRun({ text: val(text), font: FONT, size: SIZE_NORMAL, italic: true, color: "1A2335" });
+  return new TextRun({ text: val(text), font: FONT, size: SIZE_NORMAL, italics: true, color: "1A2335" });
 }
 
 function boldRun(text: string, size = SIZE_NORMAL): TextRun {
