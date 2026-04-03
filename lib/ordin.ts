@@ -9,7 +9,7 @@ const noBorder = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
 const noBorders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder };
 
 function cell(text: string, opts: {
-  bold?: boolean; width?: number; colSpan?: number; align?: AlignmentType;
+  bold?: boolean; width?: number; colSpan?: number; align?: typeof AlignmentType[keyof typeof AlignmentType];
   shade?: string; noBorder?: boolean; size?: number;
 } = {}) {
   return new TableCell({
