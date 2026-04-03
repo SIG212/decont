@@ -57,7 +57,7 @@ function cell(
     children,
     columnSpan: opts.colSpan,
     width: { size: opts.width ?? W, type: WidthType.DXA },
-    borders: (opts.borders ?? borderNoneAll) as Parameters<typeof TableCell>[0]["borders"],
+    borders: (opts.borders ?? borderNoneAll) as any,
     shading: opts.shade ? { fill: opts.shade, type: ShadingType.CLEAR } : undefined,
     verticalAlign: opts.valign ?? VerticalAlign.CENTER,
     margins: { top: 80, bottom: 80, left: 140, right: 140 },
