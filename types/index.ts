@@ -14,6 +14,7 @@ export interface DecontRow {
   // internal
   scanStatus: "pending" | "done" | "error";
   fileName?: string;
+  fileUrl?: string;
 }
 
 export type DecontField = keyof Omit<DecontRow, "id" | "nr" | "scanStatus" | "fileName">;

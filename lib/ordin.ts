@@ -4,6 +4,14 @@ import {
   PageBreak, TabStopType, TabStopPosition,
 } from "docx";
 
+export interface ItinerariuNode {
+  data?: string;
+  loc?: string;
+  oraPlecare?: string;
+  oraSosire?: string;
+  km?: number | string;
+}
+
 export interface OrdinData {
   unitatea?: string;
   numarOrdin?: string;
@@ -19,6 +27,13 @@ export interface OrdinData {
   rows?: { fel: string; nrData: string; suma: string }[];
   totalCheltuieli?: string;
   diferenta?: string;
+  distantaKm?: string;
+  // Foaie parcurs extras
+  nrAuto?: string;
+  numeSofer?: string;
+  tipAutovehicul?: "Persoane" | "Mărfuri";
+  tipCombustibil?: "Benzină" | "Motorină";
+  itinerariu?: ItinerariuNode[];
 }
 
 // ── constants ──────────────────────────────────────────────────────────────
@@ -396,6 +411,129 @@ export async function generateOrdinDeplasare(data: OrdinData): Promise<Buffer> {
         cheltuieliTable, sp(8),
         diferentaBox, sp(16),
         semnaturiTable,
+
+        // FOAIE DE PARCURS
+        new Paragraph({ children: [new PageBreak()] }),
+        new Paragraph({
+          children: [new TextRun({ text: "FOAIE DE PARCURS", font: FONT, size: PT(16), bold: true })],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: PT(20) },
+        }),
+
+        // Top checks
+        new Table({
+          width: { size: W, type: WidthType.DXA },
+          columnWidths: [Math.round(W * 0.4), Math.round(W * 0.3), Math.round(W * 0.3)],
+          rows: [
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph({ children: [lbl("Tip autovehicul: ")] }), new Paragraph({ children: [lbl("Tip combustibil: ")] })], borders: noB as any }),
+                new TableCell({ children: [new Paragraph({ children: [lbl("Persoane "), lbl(data.tipAutovehicul === "Persoane" ? "[ X ]" : "[   ]", false)] }), new Paragraph({ children: [lbl("Benzină "), lbl(data.tipCombustibil === "Benzină" ? "[ X ]" : "[   ]", false)] })], borders: noB as any }),
+                new TableCell({ children: [new Paragraph({ children: [lbl("Mărfuri "), lbl(data.tipAutovehicul === "Mărfuri" ? "[ X ]" : "[   ]", false)] }), new Paragraph({ children: [lbl("Motorină "), lbl(data.tipCombustibil === "Motorină" ? "[ X ]" : "[   ]", false)] })], borders: noB as any }),
+              ],
+            }),
+          ],
+        }),
+        sp(10),
+
+        // Info table (Data, Nr auto, Sofer)
+        new Table({
+          width: { size: W, type: WidthType.DXA },
+          columnWidths: [Math.round(W / 3), Math.round(W / 3), W - Math.round(W / 3) * 2],
+          rows: [
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph({ children: [lbl("Data:")] }), new Paragraph({ children: [val(data.dataOrdin)] })], borders: allB as any, margins: { top: 60, bottom: 60, left: 80, right: 80 } }),
+                new TableCell({ children: [new Paragraph({ children: [lbl("Număr auto:")] }), new Paragraph({ children: [val(data.nrAuto)] })], borders: allB as any, margins: { top: 60, bottom: 60, left: 80, right: 80 } }),
+                new TableCell({ children: [new Paragraph({ children: [lbl("Nume șofer:")] }), new Paragraph({ children: [val(data.numeSofer)] })], borders: allB as any, margins: { top: 60, bottom: 60, left: 80, right: 80 } }),
+              ],
+            }),
+          ],
+        }),
+        sp(10),
+
+        // Itinerariu Table
+        new Table({
+          width: { size: W, type: WidthType.DXA },
+          rows: [
+            // Header Row 1
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph({ children: [lbl("Data", true)], alignment: AlignmentType.CENTER })], rowSpan: 2, verticalAlign: VerticalAlign.CENTER, borders: allB as any, shading: { fill: "F0F0F0", type: ShadingType.CLEAR } }),
+                new TableCell({ children: [new Paragraph({ children: [lbl("Plecare", true)], alignment: AlignmentType.CENTER })], columnSpan: 2, borders: allB as any, shading: { fill: "F0F0F0", type: ShadingType.CLEAR } }),
+                new TableCell({ children: [new Paragraph({ children: [lbl("Sosire", true)], alignment: AlignmentType.CENTER })], columnSpan: 2, borders: allB as any, shading: { fill: "F0F0F0", type: ShadingType.CLEAR } }),
+                new TableCell({ children: [new Paragraph({ children: [lbl("km", true)], alignment: AlignmentType.CENTER })], rowSpan: 2, verticalAlign: VerticalAlign.CENTER, borders: allB as any, shading: { fill: "F0F0F0", type: ShadingType.CLEAR } }),
+                new TableCell({ children: [new Paragraph({ children: [lbl("Nr. act", true)], alignment: AlignmentType.CENTER })], rowSpan: 2, verticalAlign: VerticalAlign.CENTER, borders: allB as any, shading: { fill: "F0F0F0", type: ShadingType.CLEAR } }),
+                new TableCell({ children: [new Paragraph({ children: [lbl("Observații", true)], alignment: AlignmentType.CENTER })], rowSpan: 2, verticalAlign: VerticalAlign.CENTER, borders: allB as any, shading: { fill: "F0F0F0", type: ShadingType.CLEAR } }),
+              ],
+            }),
+            // Header Row 2
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph({ children: [lbl("Locul", false)], alignment: AlignmentType.CENTER })], borders: allB as any, shading: { fill: "F0F0F0", type: ShadingType.CLEAR } }),
+                new TableCell({ children: [new Paragraph({ children: [lbl("Ora", false)], alignment: AlignmentType.CENTER })], borders: allB as any, shading: { fill: "F0F0F0", type: ShadingType.CLEAR } }),
+                new TableCell({ children: [new Paragraph({ children: [lbl("Locul", false)], alignment: AlignmentType.CENTER })], borders: allB as any, shading: { fill: "F0F0F0", type: ShadingType.CLEAR } }),
+                new TableCell({ children: [new Paragraph({ children: [lbl("Ora", false)], alignment: AlignmentType.CENTER })], borders: allB as any, shading: { fill: "F0F0F0", type: ShadingType.CLEAR } }),
+              ],
+            }),
+            // Data rows
+            ...(data.itinerariu || []).slice(0, -1).map((step, i, arr) => {
+              const next = (data.itinerariu || [])[i + 1];
+              return new TableRow({
+                children: [
+                  new TableCell({ children: [new Paragraph({ children: [val(step.data)], alignment: AlignmentType.CENTER })], borders: allB as any }),
+                  new TableCell({ children: [new Paragraph({ children: [val(step.loc)] })], borders: allB as any }),
+                  new TableCell({ children: [new Paragraph({ children: [val(String(step.oraPlecare || ""))], alignment: AlignmentType.CENTER })], borders: allB as any }),
+                  new TableCell({ children: [new Paragraph({ children: [val(next.loc)] })], borders: allB as any }),
+                  new TableCell({ children: [new Paragraph({ children: [val(String(next.oraSosire || ""))], alignment: AlignmentType.CENTER })], borders: allB as any }),
+                  new TableCell({ children: [new Paragraph({ children: [val(String(next.km || ""))], alignment: AlignmentType.CENTER })], borders: allB as any }),
+                  new TableCell({ children: [new Paragraph({ children: [] })], borders: allB as any }),
+                  new TableCell({ children: [new Paragraph({ children: [] })], borders: allB as any }),
+                ],
+              });
+            }),
+            // Empty rows
+            ...Array.from({ length: Math.max(0, 12 - (data.itinerariu?.length || 0)) }, () => new TableRow({
+              height: { value: 400, rule: "atLeast" as "atLeast" },
+              children: [
+                new TableCell({ children: [new Paragraph({ children: [] })], borders: allB as any }),
+                new TableCell({ children: [new Paragraph({ children: [] })], borders: allB as any }),
+                new TableCell({ children: [new Paragraph({ children: [] })], borders: allB as any }),
+                new TableCell({ children: [new Paragraph({ children: [] })], borders: allB as any }),
+                new TableCell({ children: [new Paragraph({ children: [] })], borders: allB as any }),
+                new TableCell({ children: [new Paragraph({ children: [] })], borders: allB as any }),
+                new TableCell({ children: [new Paragraph({ children: [] })], borders: allB as any }),
+                new TableCell({ children: [new Paragraph({ children: [] })], borders: allB as any }),
+              ],
+            })),
+          ],
+        }),
+        sp(20),
+
+        // Footer
+        new Paragraph({
+          children: [
+            lbl("Consum specific: ............  "),
+            lbl("TOTAL KM/pag: "), val(data.distantaKm),
+            lbl("  Din care: în oraș ....... exterior ......."),
+          ],
+        }),
+        sp(10),
+        new Paragraph({ children: [lbl("Calculație/pag: .......................................................................................................................")] }),
+        sp(30),
+
+        new Table({
+          width: { size: W, type: WidthType.DXA },
+          rows: [
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph({ children: [lbl("Calculat")], alignment: AlignmentType.CENTER })], borders: { top: bThin } as any, width: { size: 2500, type: WidthType.DXA }, margins: { top: 80 } }),
+                new TableCell({ children: [new Paragraph({ children: [] })], borders: noB as any, width: { size: W - 5000, type: WidthType.DXA } }),
+                new TableCell({ children: [new Paragraph({ children: [lbl("Șofer")], alignment: AlignmentType.CENTER })], borders: { top: bThin } as any, width: { size: 2500, type: WidthType.DXA }, margins: { top: 80 } }),
+              ],
+            }),
+          ],
+        }),
       ],
     }],
   });

@@ -226,9 +226,24 @@ tfoot td {
   padding: 24px;
   box-shadow: 0 1px 4px rgba(0,0,0,0.08);
   display: flex;
+  flex-direction: column;
   gap: 20px;
-  align-items: flex-start;
 }
+
+.profile-header {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.profile-chevron {
+  display: none;
+  font-size: 12px;
+  color: #8899AA;
+  margin-left: auto;
+  transition: transform 0.3s ease;
+}
+
 
 .profile-avatar {
   width: 52px;
@@ -280,6 +295,7 @@ tfoot td {
   gap: 12px;
 }
 
+
 .kpi-card {
   background: white;
   border-radius: 14px;
@@ -294,9 +310,191 @@ tfoot td {
 .kpi-value { font-size: 22px; font-weight: 700; color: #1E3A5F; letter-spacing: -0.5px; }
 .kpi-label { font-size: 12px; color: #8899AA; }
 
-@media (max-width: 900px) {
-  .dashboard { grid-template-columns: 1fr; }
-  .profile-meta { border-left: none; padding-left: 0; border-top: 1px solid #EEF1F6; padding-top: 12px; flex-direction: row; }
+@media (max-width: 768px) {
+  main {
+    padding: 16px 12px;
+  }
+
+  .dashboard {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  /* Profile card – collapsible */
+  .profile-card {
+    padding: 16px;
+    gap: 0;
+  }
+
+  .profile-header {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .profile-chevron {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #EEF3FB;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+
+  .profile-meta {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    border-left: none;
+    padding-left: 0;
+    border-top: none;
+    padding-top: 0;
+    margin-top: 0;
+    transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.25s ease,
+                margin-top 0.35s ease,
+                padding-top 0.35s ease;
+  }
+
+  .profile-card.expanded .profile-meta {
+    max-height: 400px;
+    opacity: 1;
+    border-top: 1px solid #EEF1F6;
+    padding-top: 16px;
+    margin-top: 16px;
+  }
+
+  .profile-meta {
+    flex-direction: column;
+    min-width: unset;
+  }
+
+  /* KPI cards – horizontal scroll */
+  .kpis-scroll-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -12px;
+    padding: 0 12px;
+    scrollbar-width: none;
+  }
+
+  .kpis-scroll-wrapper::-webkit-scrollbar {
+    display: none;
+  }
+
+  .kpis {
+    display: flex;
+    gap: 10px;
+    min-width: max-content;
+  }
+
+  .kpi-card {
+    min-width: 150px;
+    max-width: 170px;
+    flex-shrink: 0;
+    padding: 14px 16px;
+  }
+
+  .kpi-value {
+    font-size: 18px;
+  }
+
+  .kpi-label {
+    font-size: 11px;
+  }
+
+  /* Header mobile tweaks */
+  .header-inner {
+    height: 56px;
+  }
+
+  .logo h1 {
+    font-size: 17px;
+  }
+
+  .logo p {
+    display: none;
+  }
+
+  /* Actions bar */
+  .actions-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .btn-lg {
+    width: 100%;
+    text-align: center;
+  }
+
+  .calatorii-list {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+
+  .btn-calatorie {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Trip header */
+  .calatorie-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 14px 16px;
+  }
+
+  .ch-ruta {
+    font-size: 14px;
+  }
+
+  /* Dropzone */
+  .dropzone {
+    padding: 32px 16px;
+    margin-bottom: 16px;
+  }
+
+  /* Table actions */
+  .table-actions {
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .table-actions > div {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .table-actions .btn {
+    flex: 1;
+    font-size: 12px;
+    padding: 8px 10px;
+    text-align: center;
+  }
+
+  /* Modal */
+  .modal {
+    max-height: 95vh;
+    border-radius: 16px;
+  }
+
+  .modal-overlay {
+    padding: 12px;
+    align-items: flex-end;
+  }
+
+  .retur-options {
+    flex-direction: column;
+    gap: 8px;
+  }
 }
 
 /* Actions bar */
@@ -488,4 +686,558 @@ tfoot td {
   display: flex; justify-content: space-between; align-items: center;
   padding: 16px 24px; border-top: 1px solid #EEF1F6;
   background: #FAFBFD;
+}
+
+/* Return route fixed points */
+.retur-fixed-point {
+  font-size: 13px;
+  font-weight: 600;
+  color: #6B7A90;
+  padding: 10px 14px;
+  background: #F7F9FC;
+  border-radius: 8px;
+  border: 1px dashed #C5D3E8;
+  margin-bottom: 12px;
+}
+
+/* Itinerary timeline (Step 3) */
+.itinerariu {
+  background: #F7F9FC;
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid #EEF1F6;
+}
+
+.itinerariu-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1A2335;
+  margin-bottom: 16px;
+}
+
+.itinerariu-timeline {
+  position: relative;
+  padding-left: 20px;
+}
+
+.itinerariu-timeline::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: linear-gradient(to bottom, #1E3A5F, #C5D3E8, #2D9E6B);
+  border-radius: 1px;
+}
+
+.it-point {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding-bottom: 16px;
+}
+
+.it-point:last-child {
+  padding-bottom: 0;
+}
+
+.it-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 3px solid #C5D3E8;
+  background: white;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+  margin-left: -20px;
+}
+
+.it-start .it-dot {
+  border-color: #1E3A5F;
+  background: #1E3A5F;
+}
+
+.it-end .it-dot {
+  border-color: #2D9E6B;
+  background: #2D9E6B;
+}
+
+.it-stop .it-dot {
+  border-color: #F0A030;
+  background: white;
+}
+
+.it-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 0;
+}
+
+.it-type {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #8899AA;
+}
+
+.it-content strong {
+  font-size: 14px;
+  color: #1A2335;
+  font-weight: 600;
+}
+
+.it-date {
+  font-size: 12px;
+  color: #6B7A90;
+  margin-top: 2px;
+}
+
+/* Time input */
+.form-group input[type="time"] {
+  padding: 10px 12px; border: 1.5px solid #C5D3E8; border-radius: 8px;
+  font-size: 14px; font-family: inherit; color: #1A2335;
+}
+.form-group input[type="time"]:focus { outline: none; border-color: #1E3A5F; }
+
+/* ====== Trip Card ====== */
+.trip-card {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.trip-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #1E3A5F 0%, #2A4F7F 100%);
+  color: white;
+}
+
+.trip-card-header .ch-info { display: flex; flex-direction: column; gap: 4px; }
+.trip-card-header .ch-ruta { font-size: 16px; font-weight: 700; color: white; }
+.trip-card-header .ch-meta { font-size: 12px; color: rgba(255, 255, 255, 0.85); }
+.trip-card-header .ch-badge {
+  background: rgba(255,255,255,0.2);
+  color: white;
+  backdrop-filter: blur(4px);
+}
+
+.trip-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.trip-card-header .total-badge {
+  font-size: 13px;
+  opacity: 1;
+  background: rgba(255,255,255,0.1);
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+.trip-card-header .total-badge strong {
+  color: #7ECBFF;
+}
+
+/* Bonuri section */
+.bonuri-section {
+  padding: 20px 24px;
+}
+
+.bonuri-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.bon-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: #F7F9FC;
+  border-radius: 12px;
+  border: 1px solid #EEF1F6;
+  transition: all 0.15s;
+}
+
+.bon-card:hover {
+  border-color: #C5D3E8;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.bon-card-nr {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #1E3A5F;
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.bon-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.bon-card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.bon-card-tip {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #1E3A5F;
+  background: #EEF3FB;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.bon-card-emitent {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1A2335;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bon-card-bottom {
+  display: flex;
+  gap: 12px;
+}
+
+.bon-card-data, .bon-card-doc {
+  font-size: 12px;
+  color: #8899AA;
+}
+
+.bon-card-amount {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.bon-card-amount strong {
+  font-size: 15px;
+  color: #1E3A5F;
+  display: block;
+}
+
+.bon-card-original {
+  font-size: 11px;
+  color: #8899AA;
+}
+
+/* Add bon zone */
+.bon-add-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 24px;
+  border: 2px dashed #C5D3E8;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: white;
+}
+
+.bon-add-zone:hover, .bon-add-zone.dragging {
+  border-color: #1E3A5F;
+  background: #EEF3FB;
+}
+
+.bon-add-icon { font-size: 28px; }
+.bon-add-text { font-size: 14px; font-weight: 600; color: #1A2335; }
+.bon-add-hint { font-size: 11px; color: #8899AA; }
+
+/* Trip card footer */
+.trip-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-top: 1px solid #EEF1F6;
+  background: #FAFBFD;
+}
+
+.trip-total {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trip-total span {
+  font-size: 11px;
+  color: #8899AA;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.trip-total strong {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1E3A5F;
+}
+
+.trip-footer-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ====== Bon Review Modal ====== */
+.bon-modal {
+  max-width: 520px;
+}
+
+.bon-modal-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #EEF1F6;
+}
+
+.bon-modal-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1A2335;
+  margin-bottom: 4px;
+}
+
+.bon-filename {
+  font-size: 12px;
+  color: #8899AA;
+}
+
+.bon-scanning {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 20px;
+  gap: 12px;
+  text-align: center;
+}
+
+.bon-scanning p {
+  font-size: 15px;
+  color: #1A2335;
+  font-weight: 500;
+}
+
+.bon-scanning-hint {
+  font-size: 12px;
+  color: #8899AA;
+}
+
+.bon-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bon-field-row {
+  display: flex;
+  gap: 12px;
+}
+
+.bon-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.bon-field label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6B7A90;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.bon-field input,
+.bon-field select {
+  padding: 9px 12px;
+  border: 1.5px solid #C5D3E8;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #1A2335;
+  background: white;
+  transition: border-color 0.15s;
+}
+
+.bon-field input:focus,
+.bon-field select:focus {
+  outline: none;
+  border-color: #1E3A5F;
+  box-shadow: 0 0 0 3px rgba(30,58,95,0.08);
+}
+
+.bon-field-highlight {
+  background: #EEF3FB;
+  padding: 8px;
+  border-radius: 10px;
+  margin: -4px;
+}
+
+.bon-field-highlight label {
+  color: #1E3A5F;
+}
+
+.bon-error {
+  padding: 12px 16px;
+  background: #FFF5F5;
+  border: 1px solid #F0C0C0;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #CC3333;
+}
+
+.btn-confirm {
+  background: #2D9E6B;
+  color: white;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s;
+  font-family: inherit;
+}
+
+.btn-confirm:hover {
+  background: #248A5C;
+}
+
+/* Mobile responsive for trip card */
+@media (max-width: 768px) {
+  .trip-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 16px;
+  }
+
+  .trip-card-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .bonuri-section {
+    padding: 12px;
+  }
+
+  .bon-card {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  .bon-card-emitent {
+    font-size: 13px;
+  }
+
+  .bon-card-amount strong {
+    font-size: 13px;
+  }
+
+  .bon-add-zone {
+    padding: 16px;
+  }
+
+  .trip-card-footer {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+    padding: 14px 16px;
+  }
+
+  .trip-total {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .trip-footer-actions {
+    width: 100%;
+  }
+
+  .trip-footer-actions .btn {
+    flex: 1;
+    text-align: center;
+    font-size: 12px;
+    padding: 8px;
+  }
+
+  .bon-field-row {
+    flex-direction: column;
+  }
+
+  .bon-modal {
+    max-width: 100%;
+  }
+}
+
+/* Istoric delegații */
+.history-section {
+  margin-bottom: 24px;
+}
+
+.istoric-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  margin-top: 10px;
+}
+
+.istoric-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1A2335;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.btn-add-istoric {
+  background: #EEF3FB;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: #1E3A5F;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.btn-add-istoric:hover {
+  background: #1E3A5F;
+  color: white;
+  transform: scale(1.05);
 }

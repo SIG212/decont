@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+
 import { DecontRow, ScanResult } from "@/types";
 import { generateExcel } from "@/lib/excel";
 import { v4 as uuidv4 } from "uuid";
@@ -50,13 +51,16 @@ interface RouteInfo {
 interface Calatorie {
   id: string;
   plecare: OsmLocation;
-  destinatii: OsmLocation[];
+  opriri: OsmLocation[];
+  destinatie: OsmLocation;
   ruta: RouteInfo | null;
   dataPlecare: string;
   oraPlecare: string;
   dataIntoarcere: string;
   oraSosire: string;
   tipRetur: "aceeasi" | "diferita" | "dus";
+  rutaIntoarcere: RouteInfo | null;
+  opririIntoarcere: OsmLocation[];
 }
 
 function emptyRow(nr: number): DecontRow {
@@ -151,6 +155,7 @@ export default function Home() {
   const [calatorii, setCalatorii] = useState<Calatorie[]>([]);
   const [activaId, setActivaId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [profileExpanded, setProfileExpanded] = useState(false);
   const [step, setStep] = useState(1);
 
   const [plecare, setPlecare] = useState<Waypoint>({
@@ -158,7 +163,8 @@ export default function Home() {
     query: MOCK_PROFILE.oras,
     location: { display_name: MOCK_PROFILE.oras, lat: String(MOCK_PROFILE.lat), lon: String(MOCK_PROFILE.lon), place_id: 0 },
   });
-  const [destinatii, setDestinatii] = useState<Waypoint[]>([emptyWaypoint()]);
+  const [opriri, setOpriri] = useState<Waypoint[]>([]);
+  const [destinatie, setDestinatie] = useState<Waypoint>(emptyWaypoint());
   const [ruta, setRuta] = useState<RouteInfo | null>(null);
   const [rutaLoading, setRutaLoading] = useState(false);
   const [dataPlecare, setDataPlecare] = useState("");
@@ -166,68 +172,137 @@ export default function Home() {
   const [dataIntoarcere, setDataIntoarcere] = useState("");
   const [oraSosire, setOraSosire] = useState("");
   const [tipRetur, setTipRetur] = useState<"aceeasi" | "diferita" | "dus">("aceeasi");
-  const [destinatiiIntoarcere, setDestinatiiIntoarcere] = useState<Waypoint[]>([emptyWaypoint()]);
+  const [opririIntoarcere, setOpririIntoarcere] = useState<Waypoint[]>([]);
+  const [rutaIntoarcere, setRutaIntoarcere] = useState<RouteInfo | null>(null);
+  const [rutaIntoarcereLoading, setRutaIntoarcereLoading] = useState(false);
 
   const [rows, setRows] = useState<DecontRow[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [scanning, setScanning] = useState<Set<string>>(new Set());
+  const [pendingRow, setPendingRow] = useState<DecontRow | null>(null);
+  const [showBonModal, setShowBonModal] = useState(false);
+  const [bonScanning, setBonScanning] = useState(false);
+  const [isEditingConfirm, setIsEditingConfirm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const calatoreaActiva = calatorii.find(c => c.id === activaId) ?? null;
+  const todayStr = new Date().toISOString().slice(0, 10);
 
+  // Calculate outbound route
   useEffect(() => {
-    const allSet = [plecare, ...destinatii].every(w => w.location);
-    if (!allSet || destinatii.length === 0) return;
-    const pts = [plecare, ...destinatii].map(w => w.location!);
+    const allPts = [plecare, ...opriri, destinatie];
+    const allSet = allPts.every(w => w.location);
+    if (!allSet || !destinatie.location) return;
+    const pts = allPts.map(w => w.location!);
     setRutaLoading(true);
     getRoute(pts).then(r => { setRuta(r); setRutaLoading(false); });
-  }, [plecare, destinatii]);
+  }, [plecare, opriri, destinatie]);
+
+  // Calculate return route
+  useEffect(() => {
+    if (tipRetur !== "diferita") { setRutaIntoarcere(null); return; }
+    // Return: from last destination, through return stops, back to plecare
+    const allPts = [destinatie, ...opririIntoarcere, plecare];
+    const allSet = allPts.every(w => w.location);
+    if (!allSet || !destinatie.location || !plecare.location) return;
+    const pts = allPts.map(w => w.location!);
+    setRutaIntoarcereLoading(true);
+    getRoute(pts).then(r => { setRutaIntoarcere(r); setRutaIntoarcereLoading(false); });
+  }, [tipRetur, destinatie, opririIntoarcere, plecare]);
 
   const openModal = () => {
-    setStep(1); setRuta(null); setDataPlecare(""); setOraPlecare(""); setDataIntoarcere(""); setOraSosire(""); setTipRetur("aceeasi");
+    setStep(1); setRuta(null); setRutaIntoarcere(null); setDataPlecare(""); setOraPlecare(""); setDataIntoarcere(""); setOraSosire(""); setTipRetur("aceeasi");
     setPlecare({ ...emptyWaypoint(), query: MOCK_PROFILE.oras, location: { display_name: MOCK_PROFILE.oras, lat: String(MOCK_PROFILE.lat), lon: String(MOCK_PROFILE.lon), place_id: 0 } });
-    setDestinatii([emptyWaypoint()]);
-    setDestinatiiIntoarcere([emptyWaypoint()]);
+    setOpriri([]);
+    setDestinatie(emptyWaypoint());
+    setOpririIntoarcere([]);
     setShowModal(true);
   };
 
   const creareCaHatorie = () => {
-    const locs = destinatii.map(d => d.location).filter(Boolean) as OsmLocation[];
-    if (!plecare.location || locs.length === 0) return;
-    const c: Calatorie = { id: uuidv4(), plecare: plecare.location, destinatii: locs, ruta, dataPlecare, oraPlecare, dataIntoarcere, oraSosire, tipRetur };
+    if (!plecare.location || !destinatie.location) return;
+    const c: Calatorie = {
+      id: uuidv4(),
+      plecare: plecare.location,
+      opriri: opriri.map(o => o.location).filter(Boolean) as OsmLocation[],
+      destinatie: destinatie.location,
+      ruta,
+      dataPlecare, oraPlecare, dataIntoarcere, oraSosire, tipRetur,
+      rutaIntoarcere: tipRetur === "diferita" ? rutaIntoarcere : tipRetur === "aceeasi" ? ruta : null,
+      opririIntoarcere: tipRetur === "diferita" ? opririIntoarcere.map(o => o.location).filter(Boolean) as OsmLocation[] : [],
+    };
     setCalatorii(prev => [...prev, c]);
     setActivaId(c.id);
     setRows([]);
     setShowModal(false);
   };
 
-  const processFiles = useCallback(async (files: File[]) => {
-    const validFiles = files.filter(f => ["jpg", "jpeg", "png", "webp", "pdf", "heic"].includes(f.name.split(".").pop()?.toLowerCase() || ""));
-    if (!validFiles.length) return;
-    const newRows: DecontRow[] = validFiles.map((f, i) => ({ ...emptyRow(rows.length + i + 1), fileName: f.name, scanStatus: "pending" as const }));
-    setRows(prev => [...prev, ...newRows]);
-    for (let i = 0; i < validFiles.length; i++) {
-      const file = validFiles[i]; const row = newRows[i];
-      setScanning(prev => new Set(prev).add(row.id));
-      try {
-        const fd = new FormData(); fd.append("file", file);
-        const res = await fetch("/api/scan", { method: "POST", body: fd });
-        const data: ScanResult = await res.json();
-        setRows(prev => prev.map(r => r.id === row.id ? { ...r, ...data, scanStatus: data.error ? "error" : "done", sumaPlatiata: data.sumaPlatiata ?? "", cursValutar: data.cursValutar ?? 1, valoareRON: data.valoareRON ?? "", moneda: data.moneda || "RON" } : r));
-      } catch {
-        setRows(prev => prev.map(r => r.id === row.id ? { ...r, scanStatus: "error" } : r));
-      } finally {
-        setScanning(prev => { const n = new Set(prev); n.delete(row.id); return n; });
-      }
+  const processSingleFile = useCallback(async (file: File) => {
+    const ext = file.name.split(".").pop()?.toLowerCase() || "";
+    if (!["jpg", "jpeg", "png", "webp", "pdf", "heic"].includes(ext)) return;
+    
+    // Create local preview URL
+    const fileUrl = URL.createObjectURL(file);
+    const row = { ...emptyRow(rows.length + 1), fileName: file.name, fileUrl, scanStatus: "pending" as const };
+    
+    setPendingRow(row);
+    setIsEditingConfirm(false);
+    setShowBonModal(true);
+    setBonScanning(true);
+    try {
+      const fd = new FormData(); fd.append("file", file);
+      const res = await fetch("/api/scan", { method: "POST", body: fd });
+      const data: ScanResult = await res.json();
+      setPendingRow(prev => prev ? { ...prev, ...data, scanStatus: data.error ? "error" : "done", sumaPlatiata: data.sumaPlatiata ?? "", cursValutar: data.cursValutar ?? 1, valoareRON: data.valoareRON ?? "", moneda: data.moneda || "RON" } : null);
+    } catch {
+      setPendingRow(prev => prev ? { ...prev, scanStatus: "error" } : null);
+    } finally {
+      setBonScanning(false);
     }
   }, [rows.length]);
 
-  const handleDrop = useCallback((e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); processFiles(Array.from(e.dataTransfer.files)); }, [processFiles]);
+  const confirmBon = () => {
+    if (!pendingRow) return;
+    if (isEditingConfirm) {
+      setRows(prev => prev.map(r => r.id === pendingRow.id ? pendingRow : r));
+    } else {
+      setRows(prev => [...prev, { ...pendingRow, nr: prev.length + 1, scanStatus: "done" }]);
+    }
+    setPendingRow(null);
+    setShowBonModal(false);
+    setIsEditingConfirm(false);
+  };
+
+  const openEditBon = (row: DecontRow) => {
+    setPendingRow(row);
+    setIsEditingConfirm(true);
+    setBonScanning(false);
+    setShowBonModal(true);
+  };
+
+  const updatePendingRow = (field: keyof DecontRow, value: string | number) => {
+    setPendingRow(prev => {
+      if (!prev) return null;
+      const u = { ...prev, [field]: value } as any;
+      if (field === "sumaPlatiata" || field === "cursValutar") {
+        const s = parseFloat(String(field === "sumaPlatiata" ? value : u.sumaPlatiata).replace(",", "."));
+        const c = parseFloat(String(field === "cursValutar" ? value : u.cursValutar).replace(",", "."));
+        if (!isNaN(s) && !isNaN(c)) u.valoareRON = Math.round(s * c * 100) / 100;
+      }
+      return u;
+    });
+  };
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault(); setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) processSingleFile(files[0]);
+  }, [processSingleFile]);
 
   const updateRow = (id: string, field: keyof DecontRow, value: string | number) => {
     setRows(prev => prev.map(r => {
       if (r.id !== id) return r;
-      const u = { ...r, [field]: value };
+      const u = { ...r, [field]: value } as any;
       if (field === "sumaPlatiata" || field === "cursValutar") {
         const s = parseFloat(String(field === "sumaPlatiata" ? value : u.sumaPlatiata).replace(",", "."));
         const c = parseFloat(String(field === "cursValutar" ? value : u.cursValutar).replace(",", "."));
@@ -238,13 +313,60 @@ export default function Home() {
   };
 
   const totalRON = rows.reduce((sum, r) => { const v = parseFloat(String(r.valoareRON).replace(",", ".")); return sum + (isNaN(v) ? 0 : v); }, 0);
-  const isScanning = scanning.size > 0;
-  const canStep2 = plecare.location && destinatii.some(d => d.location);
-  const canFinish = dataPlecare && dataIntoarcere;
+  const canStep2 = plecare.location && destinatie.location;
+  const canFinish = dataPlecare && (tipRetur === "dus" || dataIntoarcere);
 
   const previewOrdin = async () => {
     if (!calatoreaActiva) return;
-    const zile = Math.ceil((new Date(calatoreaActiva.dataIntoarcere).getTime() - new Date(calatoreaActiva.dataPlecare).getTime()) / 86400000) + 1;
+    
+    const fetchDistances = async (points: any[]) => {
+      if (points.length < 2) return [];
+      const coords = points.map(p => `${p.lon},${p.lat}`).join(";");
+      try {
+        const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${coords}?overview=false`);
+        const json = await res.json();
+        if (json.routes && json.routes[0]) {
+          return json.routes[0].legs.map((l: any) => (l.distance / 1000).toFixed(1));
+        }
+      } catch (e) {
+        console.error("OSRM error breakdown:", e);
+      }
+      return points.slice(1).map(() => "");
+    };
+
+    // 1. Build Outbound Nodes
+    const outboundPoints = [calatoreaActiva.plecare, ...calatoreaActiva.opriri, calatoreaActiva.destinatie];
+    const outboundDistances = await fetchDistances(outboundPoints);
+    
+    const itin: any[] = [];
+    outboundPoints.forEach((p, i) => {
+      itin.push({
+        data: calatoreaActiva.dataPlecare,
+        loc: p.display_name.split(",")[0],
+        oraPlecare: i === 0 ? calatoreaActiva.oraPlecare : "",
+        oraSosire: i > 0 ? (i === outboundPoints.length - 1 ? "..." : "") : "",
+        km: i > 0 ? outboundDistances[i-1] : "0"
+      });
+    });
+
+    // 2. Build Return Nodes
+    if (calatoreaActiva.tipRetur !== "dus") {
+      const returnPoints = [calatoreaActiva.destinatie, ...calatoreaActiva.opririIntoarcere, calatoreaActiva.plecare];
+      const returnDistances = await fetchDistances(returnPoints);
+      
+      returnPoints.forEach((p, i) => {
+        itin.push({
+          data: calatoreaActiva.dataIntoarcere,
+          loc: p.display_name.split(",")[0],
+          oraPlecare: i === 0 ? "..." : "",
+          oraSosire: i > 0 ? (i === returnPoints.length - 1 ? calatoreaActiva.oraSosire : "") : "",
+          km: i > 0 ? returnDistances[i-1] : ""
+        });
+      });
+    }
+
+    const sumKm = (calatoreaActiva.ruta?.distanceKm || 0) + (calatoreaActiva.rutaIntoarcere?.distanceKm || 0);
+
     const payload = {
       unitatea: MOCK_PROFILE.unitatea,
       numarOrdin: "",
@@ -253,19 +375,27 @@ export default function Home() {
       functia: MOCK_PROFILE.rol,
       legitimatie: MOCK_PROFILE.legitimatie,
       scopDeplasare: "deplasare în interes de serviciu",
-      destinatie: calatoreaActiva.destinatii.map(d => d.display_name.split(",")[0]).join(", "),
+      destinatie: [calatoreaActiva.destinatie.display_name.split(",")[0], ...calatoreaActiva.opriri.map(d => d.display_name.split(",")[0])].join(", "),
       dataPlecareZiOra: `${calatoreaActiva.dataPlecare} ora ${calatoreaActiva.oraPlecare || "..."}`,
       dataSosireZiOra: `${calatoreaActiva.dataIntoarcere} ora ${calatoreaActiva.oraSosire || "..."}`,
-      distantaKm: calatoreaActiva.ruta ? String(calatoreaActiva.ruta.distanceKm) : "",
+      distantaKm: String(sumKm.toFixed(1)),
       rows: rows.map(r => ({
         fel: `${r.tipDocument} - ${r.emitent}`,
         nrData: `${r.nrDocument} / ${r.dataDocument}`,
         suma: r.valoareRON ? `${r.valoareRON} RON` : "",
       })),
+      receipts: rows.map(r => ({
+        id: r.id,
+        fileUrl: r.fileUrl,
+        label: `${r.tipDocument} - ${r.emitent} (${r.valoareRON} RON)`
+      })),
       totalCheltuieli: `${totalRON.toFixed(2)} RON`,
-      avansPlecareSum: "",
-      totalAvans: "",
       diferenta: "",
+      nrAuto: "AG 010183",
+      numeSofer: MOCK_PROFILE.nume,
+      tipAutovehicul: "Persoane",
+      tipCombustibil: "Benzină",
+      itinerariu: itin
     };
     const res = await fetch("/api/ordin/preview", {
       method: "POST",
@@ -290,7 +420,7 @@ export default function Home() {
             {calatoreaActiva && rows.length > 0 && (
               <>
                 <span className="total-badge">Total: <strong>{totalRON.toFixed(2)} RON</strong></span>
-                <button className="btn btn-export" onClick={() => { const blob = generateExcel(rows); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `Decont_${new Date().toISOString().slice(0,10)}.xlsx`; a.click(); URL.revokeObjectURL(url); }} disabled={isScanning}>↓ Export Excel</button>
+                <button className="btn btn-export" onClick={() => { const blob = generateExcel(rows); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `Decont_${new Date().toISOString().slice(0,10)}.xlsx`; a.click(); URL.revokeObjectURL(url); }}>↓ Export Excel</button>
               </>
             )}
           </div>
@@ -298,14 +428,17 @@ export default function Home() {
       </header>
 
       <main>
-        {/* Dashboard */}
+        {/* Dashboard: Profile & KPIs */}
         <div className="dashboard">
-          <div className="profile-card">
-            <div className="profile-avatar">{MOCK_PROFILE.nume.split(" ").map(n => n[0]).join("")}</div>
-            <div className="profile-info">
-              <h2>{MOCK_PROFILE.nume}</h2>
-              <p className="profile-rol">{MOCK_PROFILE.rol}</p>
-              <p className="profile-oras">📍 {MOCK_PROFILE.oras}</p>
+          <div className={`profile-card ${profileExpanded ? "expanded" : ""}`}>
+            <div className="profile-header" onClick={() => setProfileExpanded(prev => !prev)}>
+              <div className="profile-avatar">{MOCK_PROFILE.nume.split(" ").map(n => n[0]).join("")}</div>
+              <div className="profile-info">
+                <h2>{MOCK_PROFILE.nume}</h2>
+                <p className="profile-rol">{MOCK_PROFILE.rol}</p>
+                <p className="profile-oras">📍 {MOCK_PROFILE.oras}</p>
+              </div>
+              <span className="profile-chevron">{profileExpanded ? "▲" : "▼"}</span>
             </div>
             <div className="profile-meta">
               <div className="meta-item"><span className="meta-label">Diurnă / zi</span><span className="meta-value">{MOCK_PROFILE.diurna} RON</span></div>
@@ -314,108 +447,128 @@ export default function Home() {
               <div className="meta-item"><span className="meta-label">Legitimație</span><span className="meta-value">{MOCK_PROFILE.legitimatie}</span></div>
             </div>
           </div>
-          <div className="kpis">
-            {[
-              { icon: "✈️", val: MOCK_KPI.calatoriiAnAcesta, label: `Călătorii în ${new Date().getFullYear()}` },
-              { icon: "🗺️", val: MOCK_KPI.calatoriiTotal, label: "Total călătorii" },
-              { icon: "💳", val: `${MOCK_KPI.cheltuieliLuna.toLocaleString("ro-RO")} RON`, label: "Cheltuieli luna aceasta" },
-              { icon: "📊", val: `${MOCK_KPI.cheltuieliAn.toLocaleString("ro-RO")} RON`, label: `Cheltuieli în ${new Date().getFullYear()}` },
-            ].map(k => (
-              <div key={k.label} className="kpi-card">
-                <span className="kpi-icon">{k.icon}</span>
-                <span className="kpi-value">{k.val}</span>
-                <span className="kpi-label">{k.label}</span>
-              </div>
-            ))}
+          <div className="kpis-scroll-wrapper">
+            <div className="kpis">
+              {[
+                { icon: "✈️", val: MOCK_KPI.calatoriiAnAcesta, label: `Călătorii în ${new Date().getFullYear()}` },
+                { icon: "🗺️", val: MOCK_KPI.calatoriiTotal, label: "Total călătorii" },
+                { icon: "💳", val: `${MOCK_KPI.cheltuieliLuna.toLocaleString("ro-RO")} RON`, label: "Cheltuieli luna aceasta" },
+                { icon: "📊", val: `${MOCK_KPI.cheltuieliAn.toLocaleString("ro-RO")} RON`, label: `Cheltuieli în ${new Date().getFullYear()}` },
+              ].map(k => (
+                <div key={k.label} className="kpi-card">
+                  <span className="kpi-icon">{k.icon}</span>
+                  <span className="kpi-value">{k.val}</span>
+                  <span className="kpi-label">{k.label}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Actions bar */}
-        <div className="actions-bar">
-          <button className="btn btn-primary btn-lg" onClick={openModal}>+ Crează călătorie în România</button>
-          {calatorii.length > 0 && (
-            <div className="calatorii-list">
-              {calatorii.map(c => (
-                <button key={c.id} className={`btn-calatorie ${activaId === c.id ? "active" : ""}`} onClick={() => { setActivaId(c.id); setRows([]); }}>
-                  <span>{c.plecare.display_name.split(",")[0]} → {c.destinatii[c.destinatii.length - 1].display_name.split(",")[0]}</span>
-                  <span className="calatorie-data">{c.dataPlecare}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Active trip */}
+        {/* 1. Active trip card (if exists) */}
         {calatoreaActiva && (
-          <>
-            <div className="calatorie-header">
+          <div className="trip-card">
+            <div className="trip-card-header">
               <div className="ch-info">
-                <span className="ch-ruta">{calatoreaActiva.plecare.display_name.split(",")[0]}{calatoreaActiva.destinatii.map(d => ` → ${d.display_name.split(",")[0]}`)}</span>
+                <span className="ch-ruta">{calatoreaActiva.plecare.display_name.split(",")[0]}{calatoreaActiva.opriri.map(d => ` → ${d.display_name.split(",")[0]}`)} → {calatoreaActiva.destinatie.display_name.split(",")[0]}</span>
                 <span className="ch-meta">{calatoreaActiva.dataPlecare} – {calatoreaActiva.dataIntoarcere}{calatoreaActiva.ruta && ` · ${calatoreaActiva.ruta.distanceKm} km · ${formatDuration(calatoreaActiva.ruta.durationMin)}`}</span>
               </div>
-              <span className="ch-badge">Călătorie activă</span>
+              <div className="trip-card-actions">
+                <span className="ch-badge">Călătorie activă</span>
+                {rows.length > 0 && <span className="total-badge">Total: <strong>{totalRON.toFixed(2)} RON</strong></span>}
+              </div>
             </div>
 
-            <div className={`dropzone ${isDragging ? "dragging" : ""}`} onDragOver={e => { e.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()}>
-              <input ref={fileInputRef} type="file" multiple accept=".jpg,.jpeg,.png,.webp,.pdf,.heic" style={{ display: "none" }} onChange={e => processFiles(Array.from(e.target.files || []))} />
-              <div className="dz-content">
-                {isScanning ? (<><div className="spinner" /><p>Se procesează {scanning.size} bon{scanning.size > 1 ? "uri" : ""}...</p></>) : (<><div className="dz-icon">📎</div><p><strong>Adaugă bonuri pentru această călătorie</strong></p><span className="dz-hint">JPG, PNG, PDF, HEIC — multiple fișiere simultan</span></>)}
+            <div className="bonuri-section">
+              <div
+                className={`bon-add-zone ${isDragging ? "dragging" : ""}`}
+                onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                style={{ marginBottom: rows.length > 0 ? "16px" : "0" }}
+              >
+                <input ref={fileInputRef} type="file" accept=".jpg,.jpeg,.png,.webp,.pdf,.heic" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) processSingleFile(f); e.target.value = ""; }} />
+                <span className="bon-add-icon">📷</span>
+                <span className="bon-add-text">Adaugă bon</span>
+                <span className="bon-add-hint">JPG, PNG, PDF, HEIC</span>
               </div>
+
+              {rows.length > 0 && (
+                <div className="bonuri-list">
+                  {rows.map((row, i) => (
+                    <div key={row.id} className="bon-card" onClick={() => openEditBon(row)} style={{cursor: "pointer"}}>
+                      <div className="bon-card-nr">{i + 1}</div>
+                      <div className="bon-card-body">
+                        <div className="bon-card-top">
+                          <span className="bon-card-tip">{row.tipDocument || "—"}</span>
+                          <span className="bon-card-emitent">{row.emitent || "Emitent necunoscut"}</span>
+                        </div>
+                        <div className="bon-card-bottom">
+                          <span className="bon-card-data">{row.dataDocument || "—"}</span>
+                          <span className="bon-card-doc">Nr. {row.nrDocument || "—"}</span>
+                        </div>
+                      </div>
+                      <div className="bon-card-amount">
+                        <strong>{row.valoareRON ? `${Number(row.valoareRON).toFixed(2)} RON` : "—"}</strong>
+                        {row.moneda !== "RON" && row.sumaPlatiata && (
+                          <span className="bon-card-original">{row.sumaPlatiata} {row.moneda}</span>
+                        )}
+                      </div>
+                      <button className="btn-del" onClick={(e) => { e.stopPropagation(); setRows(prev => prev.filter(r => r.id !== row.id).map((r, idx) => ({ ...r, nr: idx + 1 }))); }}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {rows.length > 0 && (
-              <div className="table-wrap">
-                <div className="table-scroll">
-                  <table>
-                    <thead><tr>
-                      <th className="col-nr">#</th><th className="col-tip">Tip document</th><th className="col-nr-doc">Nr. document</th>
-                      <th className="col-data">Data</th><th className="col-emitent">Emitent</th><th className="col-suma">Suma plătită</th>
-                      <th className="col-moneda">Monedă</th><th className="col-curs">Curs</th><th className="col-ron">Valoare RON</th>
-                      <th className="col-platitor">Plătitor</th><th className="col-expl">Explicații</th><th className="col-del" />
-                    </tr></thead>
-                    <tbody>
-                      {rows.map(row => {
-                        const isPending = row.scanStatus === "pending" || scanning.has(row.id);
-                        const isError = row.scanStatus === "error";
-                        return (
-                          <tr key={row.id} className={isPending ? "row-pending" : isError ? "row-error" : ""}>
-                            <td className="col-nr">{row.nr}</td>
-                            <td className="col-tip">{isPending ? <span className="skeleton" /> : <select value={row.tipDocument} onChange={e => updateRow(row.id, "tipDocument", e.target.value)}><option value="">—</option>{TIP_DOCUMENTE.map(t => <option key={t} value={t}>{t}</option>)}</select>}</td>
-                            <td className="col-nr-doc">{isPending ? <span className="skeleton" /> : <input value={row.nrDocument} onChange={e => updateRow(row.id, "nrDocument", e.target.value)} />}</td>
-                            <td className="col-data">{isPending ? <span className="skeleton" /> : <input value={row.dataDocument} onChange={e => updateRow(row.id, "dataDocument", e.target.value)} placeholder="DD.MM.YYYY" />}</td>
-                            <td className="col-emitent">{isPending ? <span className="skeleton" /> : <input value={row.emitent} onChange={e => updateRow(row.id, "emitent", e.target.value)} />}</td>
-                            <td className="col-suma">{isPending ? <span className="skeleton" /> : <input type="number" step="0.01" value={row.sumaPlatiata} onChange={e => updateRow(row.id, "sumaPlatiata", e.target.value)} />}</td>
-                            <td className="col-moneda">{isPending ? <span className="skeleton" /> : <select value={row.moneda} onChange={e => updateRow(row.id, "moneda", e.target.value)}>{MONEDE.map(m => <option key={m} value={m}>{m}</option>)}</select>}</td>
-                            <td className="col-curs">{isPending ? <span className="skeleton" /> : <input type="number" step="0.0001" value={row.cursValutar} onChange={e => updateRow(row.id, "cursValutar", e.target.value)} />}</td>
-                            <td className="col-ron">{isPending ? <span className="skeleton" /> : <input type="number" step="0.01" value={row.valoareRON} onChange={e => updateRow(row.id, "valoareRON", e.target.value)} className="input-ron" />}</td>
-                            <td className="col-platitor">{isPending ? <span className="skeleton" /> : <input value={row.platitor} onChange={e => updateRow(row.id, "platitor", e.target.value)} />}</td>
-                            <td className="col-expl">{isPending ? <span className="skeleton" /> : <input value={row.explicatii} onChange={e => updateRow(row.id, "explicatii", e.target.value)} />}</td>
-                            <td className="col-del"><button className="btn-del" onClick={() => setRows(prev => prev.filter(r => r.id !== row.id).map((r, i) => ({ ...r, nr: i + 1 })))}>×</button></td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                    <tfoot><tr><td colSpan={8} className="total-label">TOTAL</td><td className="total-value">{totalRON.toFixed(2)}</td><td colSpan={3} /></tr></tfoot>
-                  </table>
+              <div className="trip-card-footer">
+                <div className="trip-total">
+                  <span>Total cheltuieli</span>
+                  <strong>{totalRON.toFixed(2)} RON</strong>
                 </div>
-                <div className="table-actions">
-                  <button className="btn btn-ghost" onClick={() => setRows(prev => [...prev, emptyRow(prev.length + 1)])}>+ Adaugă rând manual</button>
-                  <div style={{display:"flex",gap:"8px"}}>
-                    <button className="btn btn-ghost" onClick={previewOrdin}>👁 Preview ordin deplasare</button>
-                    <button className="btn btn-export" onClick={() => { const blob = generateExcel(rows); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `Decont_${new Date().toISOString().slice(0,10)}.xlsx`; a.click(); URL.revokeObjectURL(url); }} disabled={isScanning}>↓ Export Excel</button>
-                  </div>
+                <div className="trip-footer-actions">
+                  <button className="btn btn-ghost" onClick={previewOrdin}>👁 Ordin deplasare</button>
+                  <button className="btn btn-export" onClick={() => { const blob = generateExcel(rows); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `Decont_${new Date().toISOString().slice(0,10)}.xlsx`; a.click(); URL.revokeObjectURL(url); }}>↓ Export Excel</button>
                 </div>
               </div>
             )}
-          </>
-        )}
-
-        {!calatoreaActiva && (
-          <div className="empty-state">
-            <div className="empty-icon">🗺️</div>
-            <p>Crează o călătorie pentru a putea adăuga cheltuieli</p>
           </div>
         )}
+
+        {/* 2. Primary action button */}
+        <div style={{ marginBottom: "24px" }}>
+          <button className="btn btn-primary btn-lg" onClick={openModal} style={{ width: "100%" }}>+ Creează călătorie în România</button>
+        </div>
+
+        {/* 3. Trip History Section */}
+        <div className="history-section" style={{ paddingBottom: "40px" }}>
+          <div className="istoric-header">
+            <h3 className="istoric-title">Istoric delegații</h3>
+            <button className="btn-add-istoric" onClick={openModal} title="Creează călătorie nouă">+</button>
+          </div>
+          
+          <div className="actions-bar">
+            {calatorii.length > (calatoreaActiva ? 1 : 0) ? (
+              <div className="calatorii-list">
+                {calatorii
+                  .filter(c => activaId !== c.id)
+                  .map(c => (
+                    <button key={c.id} className="btn-calatorie" onClick={() => { setActivaId(c.id); setRows([]); }}>
+                      <span>{c.plecare.display_name.split(",")[0]} → {c.destinatie.display_name.split(",")[0]}</span>
+                      <span className="calatorie-data">{c.dataPlecare}</span>
+                    </button>
+                  ))
+                }
+              </div>
+            ) : (
+              <div className="empty-state" style={{ padding: "20px 0", textAlign: "left" }}>
+                <p style={{ fontSize: "13px", color: "#8899AA" }}>Nicio altă delegație în istoric.</p>
+              </div>
+            )}
+          </div>
+        </div>
       </main>
 
       {/* Wizard modal */}
@@ -435,13 +588,14 @@ export default function Home() {
               <div className="modal-body">
                 <h2>Definește ruta</h2>
                 <WaypointInput waypoint={plecare} label="Oraș de plecare" onChange={setPlecare} />
-                {destinatii.map((d, i) => (
+                {opriri.map((d, i) => (
                   <div key={d.id} className="dest-row">
-                    <WaypointInput waypoint={d} label={i === 0 ? "Destinație" : `Oprire ${i + 1}`} onChange={w => setDestinatii(prev => prev.map((x, j) => j === i ? w : x))} />
-                    {destinatii.length > 1 && <button className="btn-rm" onClick={() => setDestinatii(prev => prev.filter((_, j) => j !== i))}>×</button>}
+                    <WaypointInput waypoint={d} label={`Oprire ${i + 1}`} onChange={w => setOpriri(prev => prev.map((x, j) => j === i ? w : x))} />
+                    <button className="btn-rm" onClick={() => setOpriri(prev => prev.filter((_, j) => j !== i))}>×</button>
                   </div>
                 ))}
-                <button className="btn btn-ghost btn-sm" onClick={() => setDestinatii(prev => [...prev, emptyWaypoint()])}>+ Adaugă oprire</button>
+                <WaypointInput waypoint={destinatie} label="Destinație" onChange={setDestinatie} />
+                <button className="btn btn-ghost btn-sm" onClick={() => setOpriri(prev => [...prev, emptyWaypoint()])}>+ Adaugă oprire intermediară</button>
                 {rutaLoading && <p className="ruta-loading">Se calculează ruta...</p>}
                 {ruta && !rutaLoading && (
                   <div className="ruta-info">
@@ -457,13 +611,15 @@ export default function Home() {
               <div className="modal-body">
                 <h2>Date deplasare</h2>
                 <div className="form-row">
-                  <div className="form-group"><label>Data plecare</label><input type="date" value={dataPlecare} onChange={e => setDataPlecare(e.target.value)} /></div>
+                  <div className="form-group"><label>Data plecare</label><input type="date" value={dataPlecare} min={todayStr} onChange={e => { setDataPlecare(e.target.value); if (dataIntoarcere && e.target.value > dataIntoarcere) setDataIntoarcere(""); }} /></div>
                   <div className="form-group"><label>Ora plecare</label><input type="time" value={oraPlecare} onChange={e => setOraPlecare(e.target.value)} /></div>
                 </div>
-                <div className="form-row">
-                  <div className="form-group"><label>Data întoarcere</label><input type="date" value={dataIntoarcere} min={dataPlecare} onChange={e => setDataIntoarcere(e.target.value)} /></div>
-                  <div className="form-group"><label>Ora sosire</label><input type="time" value={oraSosire} onChange={e => setOraSosire(e.target.value)} /></div>
-                </div>
+                {tipRetur !== "dus" && (
+                  <div className="form-row">
+                    <div className="form-group"><label>Data întoarcere</label><input type="date" value={dataIntoarcere} min={dataPlecare || todayStr} onChange={e => setDataIntoarcere(e.target.value)} /></div>
+                    <div className="form-group"><label>Ora sosire</label><input type="time" value={oraSosire} onChange={e => setOraSosire(e.target.value)} /></div>
+                  </div>
+                )}
                 <div className="form-group">
                   <label>Tip retur</label>
                   <div className="retur-options">
@@ -477,12 +633,23 @@ export default function Home() {
                 {tipRetur === "diferita" && (
                   <div className="retur-ruta">
                     <p className="retur-label">Ruta de întoarcere</p>
-                    {destinatiiIntoarcere.map((d, i) => (
+                    <div className="retur-fixed-point">📍 {destinatie.location?.display_name.split(",").slice(0, 2).join(", ") || "Destinație"}</div>
+                    {opririIntoarcere.map((d, i) => (
                       <div key={d.id} className="dest-row">
-                        <WaypointInput waypoint={d} label={`Punct ${i + 1}`} onChange={w => setDestinatiiIntoarcere(prev => prev.map((x, j) => j === i ? w : x))} />
+                        <WaypointInput waypoint={d} label={`Oprire retur ${i + 1}`} onChange={w => setOpririIntoarcere(prev => prev.map((x, j) => j === i ? w : x))} />
+                        <button className="btn-rm" onClick={() => setOpririIntoarcere(prev => prev.filter((_, j) => j !== i))}>×</button>
                       </div>
                     ))}
-                    <button className="btn btn-ghost btn-sm" onClick={() => setDestinatiiIntoarcere(prev => [...prev, emptyWaypoint()])}>+ Adaugă punct</button>
+                    <div className="retur-fixed-point">🏠 {plecare.location?.display_name.split(",").slice(0, 2).join(", ") || "Plecare"}</div>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setOpririIntoarcere(prev => [...prev, emptyWaypoint()])}>+ Adaugă oprire retur</button>
+                    {rutaIntoarcereLoading && <p className="ruta-loading">Se calculează ruta de întoarcere...</p>}
+                    {rutaIntoarcere && !rutaIntoarcereLoading && (
+                      <div className="ruta-info">
+                        <span>🛣️ <strong>{rutaIntoarcere.distanceKm} km</strong></span>
+                        <span>⏱ <strong>{formatDuration(rutaIntoarcere.durationMin)}</strong></span>
+                        <span className="ruta-note">retur · via mașină</span>
+                      </div>
+                    )}
                   </div>
                 )}
                 {dataPlecare && dataIntoarcere && (
@@ -497,12 +664,110 @@ export default function Home() {
             {step === 3 && (
               <div className="modal-body">
                 <h2>Sumar călătorie</h2>
-                <div className="sumar">
-                  <div className="sumar-row"><span>Plecare</span><strong>{plecare.location?.display_name.split(",").slice(0, 2).join(", ")}</strong></div>
-                  <div className="sumar-row"><span>Destinație</span><strong>{destinatii.filter(d => d.location).map(d => d.location!.display_name.split(",")[0]).join(" → ")}</strong></div>
-                  {ruta && <div className="sumar-row"><span>Distanță</span><strong>{ruta.distanceKm} km · {formatDuration(ruta.durationMin)}</strong></div>}
-                  <div className="sumar-row"><span>Perioadă</span><strong>{dataPlecare} {oraPlecare && `ora ${oraPlecare}`} → {dataIntoarcere} {oraSosire && `ora ${oraSosire}`}</strong></div>
-                  <div className="sumar-row"><span>Retur</span><strong>{{ aceeasi: "Aceeași rută", diferita: "Rută diferită", dus: "Doar dus" }[tipRetur]}</strong></div>
+                <div className="itinerariu">
+                  <h3 className="itinerariu-title">🗺️ Itinerariu dus</h3>
+                  <div className="itinerariu-timeline">
+                    <div className="it-point it-start">
+                      <div className="it-dot"></div>
+                      <div className="it-content">
+                        <span className="it-type">Plecare</span>
+                        <strong>{plecare.location?.display_name.split(",").slice(0, 2).join(", ")}</strong>
+                        {dataPlecare && <span className="it-date">{dataPlecare} {oraPlecare && `ora ${oraPlecare}`}</span>}
+                      </div>
+                    </div>
+                    {opriri.filter(o => o.location).map((o, i) => (
+                      <div key={o.id} className="it-point it-stop">
+                        <div className="it-dot"></div>
+                        <div className="it-content">
+                          <span className="it-type">Oprire {i + 1}</span>
+                          <strong>{o.location!.display_name.split(",").slice(0, 2).join(", ")}</strong>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="it-point it-end">
+                      <div className="it-dot"></div>
+                      <div className="it-content">
+                        <span className="it-type">Destinație</span>
+                        <strong>{destinatie.location?.display_name.split(",").slice(0, 2).join(", ")}</strong>
+                      </div>
+                    </div>
+                  </div>
+                  {ruta && (
+                    <div className="ruta-info" style={{marginTop: "8px"}}>
+                      <span>🛣️ <strong>{ruta.distanceKm} km</strong></span>
+                      <span>⏱ <strong>{formatDuration(ruta.durationMin)}</strong></span>
+                    </div>
+                  )}
+                </div>
+
+                {tipRetur !== "dus" && (
+                  <div className="itinerariu" style={{marginTop: "16px"}}>
+                    <h3 className="itinerariu-title">🔄 Itinerariu retur {tipRetur === "aceeasi" ? "(aceeași rută)" : "(rută diferită)"}</h3>
+                    <div className="itinerariu-timeline">
+                      <div className="it-point it-start">
+                        <div className="it-dot"></div>
+                        <div className="it-content">
+                          <span className="it-type">Plecare retur</span>
+                          <strong>{destinatie.location?.display_name.split(",").slice(0, 2).join(", ")}</strong>
+                        </div>
+                      </div>
+                      {tipRetur === "aceeasi" && opriri.filter(o => o.location).reverse().map((o, i) => (
+                        <div key={`ret-${o.id}`} className="it-point it-stop">
+                          <div className="it-dot"></div>
+                          <div className="it-content">
+                            <span className="it-type">Oprire {i + 1}</span>
+                            <strong>{o.location!.display_name.split(",").slice(0, 2).join(", ")}</strong>
+                          </div>
+                        </div>
+                      ))}
+                      {tipRetur === "diferita" && opririIntoarcere.filter(o => o.location).map((o, i) => (
+                        <div key={`reti-${o.id}`} className="it-point it-stop">
+                          <div className="it-dot"></div>
+                          <div className="it-content">
+                            <span className="it-type">Oprire retur {i + 1}</span>
+                            <strong>{o.location!.display_name.split(",").slice(0, 2).join(", ")}</strong>
+                          </div>
+                        </div>
+                      ))}
+                      <div className="it-point it-end">
+                        <div className="it-dot"></div>
+                        <div className="it-content">
+                          <span className="it-type">Sosire</span>
+                          <strong>{plecare.location?.display_name.split(",").slice(0, 2).join(", ")}</strong>
+                          {dataIntoarcere && <span className="it-date">{dataIntoarcere} {oraSosire && `ora ${oraSosire}`}</span>}
+                        </div>
+                      </div>
+                    </div>
+                    {tipRetur === "aceeasi" && ruta && (
+                      <div className="ruta-info" style={{marginTop: "8px"}}>
+                        <span>🛣️ <strong>{ruta.distanceKm} km</strong></span>
+                        <span>⏱ <strong>{formatDuration(ruta.durationMin)}</strong></span>
+                      </div>
+                    )}
+                    {tipRetur === "diferita" && rutaIntoarcere && (
+                      <div className="ruta-info" style={{marginTop: "8px"}}>
+                        <span>🛣️ <strong>{rutaIntoarcere.distanceKm} km</strong></span>
+                        <span>⏱ <strong>{formatDuration(rutaIntoarcere.durationMin)}</strong></span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="sumar" style={{marginTop: "16px"}}>
+                  <div className="sumar-row"><span>Perioadă</span><strong>{dataPlecare} {oraPlecare && `ora ${oraPlecare}`} → {tipRetur === "dus" ? "(doar dus)" : `${dataIntoarcere} ${oraSosire ? `ora ${oraSosire}` : ""}`}</strong></div>
+                  {ruta && <div className="sumar-row"><span>Distanță dus</span><strong>{ruta.distanceKm} km · {formatDuration(ruta.durationMin)}</strong></div>}
+                  {tipRetur === "aceeasi" && ruta && <div className="sumar-row"><span>Distanță retur</span><strong>{ruta.distanceKm} km · {formatDuration(ruta.durationMin)}</strong></div>}
+                  {tipRetur === "diferita" && rutaIntoarcere && <div className="sumar-row"><span>Distanță retur</span><strong>{rutaIntoarcere.distanceKm} km · {formatDuration(rutaIntoarcere.durationMin)}</strong></div>}
+                  {ruta && (
+                    <div className="sumar-row"><span>Distanță totală</span><strong>
+                      {(() => {
+                        let total = ruta.distanceKm;
+                        if (tipRetur === "aceeasi") total += ruta.distanceKm;
+                        if (tipRetur === "diferita" && rutaIntoarcere) total += rutaIntoarcere.distanceKm;
+                        return `${total} km`;
+                      })()}
+                    </strong></div>
+                  )}
                   {dataPlecare && dataIntoarcere && (
                     <div className="sumar-row sumar-total"><span>Diurnă totală</span><strong>{(() => { const z = Math.ceil((new Date(dataIntoarcere).getTime() - new Date(dataPlecare).getTime()) / 86400000) + 1; return `${z * MOCK_PROFILE.diurna} RON`; })()}</strong></div>
                   )}
@@ -514,9 +779,98 @@ export default function Home() {
               <button className="btn btn-ghost" onClick={() => step === 1 ? setShowModal(false) : setStep(s => s - 1)}>{step === 1 ? "Anulează" : "← Înapoi"}</button>
               {step < 3
                 ? <button className="btn btn-primary" disabled={step === 1 ? !canStep2 : !canFinish} onClick={() => setStep(s => s + 1)}>Continuă →</button>
-                : <button className="btn btn-primary" onClick={creareCaHatorie}>Crează călătoria ✓</button>
+                : <button className="btn btn-primary" onClick={creareCaHatorie}>Creează călătoria ✓</button>
               }
             </div>
+          </div>
+        </div>
+      )}
+      {/* Bon review modal */}
+      {showBonModal && pendingRow && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !bonScanning && (setShowBonModal(false), setPendingRow(null))}>
+          <div className="modal bon-modal">
+            <div className="bon-modal-header">
+              <h2>{bonScanning ? "Se scanează bonul..." : isEditingConfirm ? "Editează datele bonului" : "Verifică datele bonului"}</h2>
+              {pendingRow.fileName && <span className="bon-filename">📄 {pendingRow.fileName}</span>}
+            </div>
+
+            <div className="modal-body">
+              {bonScanning ? (
+                <div className="bon-scanning">
+                  <div className="spinner" />
+                  <p>Se extrag datele din document...</p>
+                  <span className="bon-scanning-hint">AI analizează bonul</span>
+                </div>
+              ) : (
+                <div className="bon-fields">
+                  <div className="bon-field-row">
+                    <div className="bon-field">
+                      <label>Tip document</label>
+                      <select value={pendingRow.tipDocument} onChange={e => updatePendingRow("tipDocument", e.target.value)}>
+                        <option value="">—</option>
+                        {TIP_DOCUMENTE.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div className="bon-field">
+                      <label>Nr. document</label>
+                      <input value={pendingRow.nrDocument} onChange={e => updatePendingRow("nrDocument", e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="bon-field-row">
+                    <div className="bon-field">
+                      <label>Data document</label>
+                      <input value={pendingRow.dataDocument} onChange={e => updatePendingRow("dataDocument", e.target.value)} placeholder="DD.MM.YYYY" />
+                    </div>
+                    <div className="bon-field">
+                      <label>Emitent</label>
+                      <input value={pendingRow.emitent} onChange={e => updatePendingRow("emitent", e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="bon-field-row">
+                    <div className="bon-field">
+                      <label>Suma plătită</label>
+                      <input type="number" step="0.01" value={pendingRow.sumaPlatiata} onChange={e => updatePendingRow("sumaPlatiata", e.target.value)} />
+                    </div>
+                    <div className="bon-field">
+                      <label>Monedă</label>
+                      <select value={pendingRow.moneda} onChange={e => updatePendingRow("moneda", e.target.value)}>
+                        {MONEDE.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="bon-field-row">
+                    <div className="bon-field">
+                      <label>Curs valutar</label>
+                      <input type="number" step="0.0001" value={pendingRow.cursValutar} onChange={e => updatePendingRow("cursValutar", e.target.value)} />
+                    </div>
+                    <div className="bon-field bon-field-highlight">
+                      <label>Valoare RON</label>
+                      <input type="number" step="0.01" value={pendingRow.valoareRON} onChange={e => updatePendingRow("valoareRON", e.target.value)} className="input-ron" />
+                    </div>
+                  </div>
+                  <div className="bon-field-row">
+                    <div className="bon-field">
+                      <label>Plătitor</label>
+                      <input value={pendingRow.platitor} onChange={e => updatePendingRow("platitor", e.target.value)} />
+                    </div>
+                    <div className="bon-field">
+                      <label>Explicații</label>
+                      <input value={pendingRow.explicatii} onChange={e => updatePendingRow("explicatii", e.target.value)} />
+                    </div>
+                  </div>
+                  {pendingRow.scanStatus === "error" && (
+                    <div className="bon-error">⚠️ Nu am putut extrage datele automat. Completează manual.</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {!bonScanning && (
+              <div className="modal-footer">
+                <button className="btn btn-ghost" onClick={() => { setShowBonModal(false); setPendingRow(null); }}>Anulează</button>
+                <button className="btn btn-confirm" onClick={confirmBon}>✓ {isEditingConfirm ? "Salvează modificările" : "E în regulă, adaugă la decont"}</button>
+              </div>
+            )}
           </div>
         </div>
       )}
