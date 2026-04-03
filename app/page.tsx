@@ -5,6 +5,21 @@ import { DecontRow, ScanResult } from "@/types";
 import { generateExcel } from "@/lib/excel";
 import { v4 as uuidv4 } from "uuid";
 
+const MOCK_PROFILE = {
+  nume: "Ionescu Alexandru",
+  rol: "Account Manager",
+  oras: "Cluj-Napoca",
+  diurna: 75,
+  transport: ["Mașină personală", "Avion", "Transport în comun"],
+};
+
+const MOCK_KPI = {
+  calatoriiAnAcesta: 12,
+  calatoriiTotal: 47,
+  cheltuieliLuna: 3240,
+  cheltuieliAn: 18750,
+};
+
 const MONEDE = ["RON", "EUR", "USD", "GBP", "CHF", "HUF"];
 const TIP_DOCUMENTE = ["bon fiscal", "factura", "chitanta", "bilet", "altele"];
 
@@ -171,6 +186,55 @@ export default function Home() {
       </header>
 
       <main>
+        {/* Profile + KPIs */}
+        <div className="dashboard">
+          <div className="profile-card">
+            <div className="profile-avatar">{MOCK_PROFILE.nume.split(" ").map(n => n[0]).join("")}</div>
+            <div className="profile-info">
+              <h2>{MOCK_PROFILE.nume}</h2>
+              <p className="profile-rol">{MOCK_PROFILE.rol}</p>
+              <p className="profile-oras">📍 {MOCK_PROFILE.oras}</p>
+            </div>
+            <div className="profile-meta">
+              <div className="meta-item">
+                <span className="meta-label">Diurnă / zi</span>
+                <span className="meta-value">{MOCK_PROFILE.diurna} RON</span>
+              </div>
+              <div className="meta-item">
+                <span className="meta-label">Transport</span>
+                <div className="transport-tags">
+                  {MOCK_PROFILE.transport.map(t => (
+                    <span key={t} className="tag">{t}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="kpis">
+            <div className="kpi-card">
+              <span className="kpi-icon">✈️</span>
+              <span className="kpi-value">{MOCK_KPI.calatoriiAnAcesta}</span>
+              <span className="kpi-label">Călătorii în {new Date().getFullYear()}</span>
+            </div>
+            <div className="kpi-card">
+              <span className="kpi-icon">🗺️</span>
+              <span className="kpi-value">{MOCK_KPI.calatoriiTotal}</span>
+              <span className="kpi-label">Total călătorii</span>
+            </div>
+            <div className="kpi-card">
+              <span className="kpi-icon">💳</span>
+              <span className="kpi-value">{MOCK_KPI.cheltuieliLuna.toLocaleString("ro-RO")} RON</span>
+              <span className="kpi-label">Cheltuieli luna aceasta</span>
+            </div>
+            <div className="kpi-card">
+              <span className="kpi-icon">📊</span>
+              <span className="kpi-value">{MOCK_KPI.cheltuieliAn.toLocaleString("ro-RO")} RON</span>
+              <span className="kpi-label">Cheltuieli în {new Date().getFullYear()}</span>
+            </div>
+          </div>
+        </div>
+
         {/* Drop zone */}
         <div
           className={`dropzone ${isDragging ? "dragging" : ""}`}
@@ -312,6 +376,8 @@ export default function Home() {
           </div>
         )}
       </main>
+
+
     </div>
   );
 }
